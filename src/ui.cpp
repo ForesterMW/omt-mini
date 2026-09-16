@@ -32,6 +32,8 @@ void Ctx::begin(ID2D1DeviceContext* dc, float width, float height, Input* input)
     popup_pending_ = false;
     hot_ = kNoId;
 
+    claimed_.clear();
+
     const double now = static_cast<double>(util::now_ms());
     dt_ = last_time_ > 0.0
         ? std::min(0.1f, static_cast<float>((now - last_time_) / 1000.0))
@@ -66,7 +68,7 @@ void Ctx::end() {
         for (size_t i = 0; i < p.items.size(); ++i) {
             const D2D1_RECT_F ir = D2D1::RectF(list.left + 4, y, list.right - 4, y + item_h);
             const bool over = hovered(ir);
-            const bool sel  = p.index && static_cast<int>(i) == *p.index;
+            const bool sel  = static_cast<int>(i) == p.selected;
 
             if (over)      fill_rect(ir, theme().accent, 4.0f);
             else if (sel)  fill_rect(ir, theme().panel_sel, 4.0f);
@@ -79,10 +81,10 @@ void Ctx::end() {
                       theme().accent, 1.6f);
 
             if (over && input_->mouse_pressed) {
-                if (p.index) *p.index = static_cast<int>(i);
                 dropdown_changed_ = p.id;
-                open_dropdown_ = kNoId;
-                needs_redraw_ = true;
+                dropdown_value_   = static_cast<int>(i);
+                open_dropdown_    = kNoId;
+                needs_redraw_     = true;
             }
             y += item_h;
         }
@@ -263,8 +265,27 @@ bool Ctx::hovered(const D2D1_RECT_F& r) const {
     return contains(r, input_->mouse_x, input_->mouse_y);
 }
 
+void Ctx::claim(Id id) {
+    if (id == kNoId) return;
+    for (Id other : claimed_) {
+        if (other != id) continue;
+        // Logged rather than asserted: a duplicate is a bug worth finding, but
+        // not worth taking the application down over in front of an audience.
+        static Id last_reported = kNoId;
+        if (last_reported != id) {
+            last_reported = id;
+            util::logf("ui: widget id %u is used by more than one control in the "
+                       "same frame; clicks on it will be unreliable",
+                       static_cast<unsigned>(id));
+        }
+        return;
+    }
+    claimed_.push_back(id);
+}
+
 bool Ctx::consume_click(Id id, const D2D1_RECT_F& r, bool enabled) {
     if (!enabled || !input_) return false;
+    claim(id);
     // While a dropdown list is open it owns all clicks.
     if (open_dropdown_ != kNoId && open_dropdown_ != id) return false;
 
@@ -502,11 +523,27 @@ bool Ctx::text_field(Id id, const D2D1_RECT_F& r, std::wstring* value,
 }
 
 bool Ctx::dropdown(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>& items, int* index) {
+    // Apply a selection that end() committed on the previous frame, before the
+    // control is drawn, so it shows the new value on this frame rather than the
+    // next one. The caller's index variable is alive again at this point,
+    // which is the whole reason the selection travels as a value.
+    bool changed = false;
+    if (dropdown_changed_ == id) {
+        dropdown_changed_ = kNoId;
+        if (index && dropdown_value_ >= 0 &&
+            dropdown_value_ < static_cast<int>(items.size())) {
+            *index = dropdown_value_;
+            changed = true;
+        }
+        dropdown_value_ = -1;
+    }
+
     const bool is_open = open_dropdown_ == id;
 
     // While open, this control keeps taking clicks so the list can close.
     bool clicked = false;
     if (input_) {
+        claim(id);
         const bool over = hovered(r);
         if (over) hot_ = id;
         if (over && input_->mouse_pressed &&
@@ -534,22 +571,15 @@ bool Ctx::dropdown(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>&
           theme().text_dim, 1.5f);
 
     if (open_dropdown_ == id) {
-        popup_pending_ = true;
-        popup_.anchor  = r;
-        popup_.items   = items;
-        popup_.index   = index;
-        popup_.id      = id;
+        popup_pending_  = true;
+        popup_.anchor   = r;
+        popup_.items    = items;
+        popup_.selected = index ? *index : -1;
+        popup_.id       = id;
     }
 
-    // A selection is committed while the popup is drawn in end(), so it is
-    // reported here on the following frame. end() requests that frame.
-    if (dropdown_changed_ == id) {
-        dropdown_changed_ = kNoId;
-        (void)clicked;
-        return true;
-    }
     (void)clicked;
-    return false;
+    return changed;
 }
 
 bool Ctx::tabs(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>& labels, int* active) {

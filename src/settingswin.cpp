@@ -729,7 +729,9 @@ void SettingsWindow::on_render(ui::Ctx& ctx) {
     ctx.fill_rect(D2D1::RectF(0, 0, ctx.width(), ctx.height()), theme().bg);
 
     const D2D1_RECT_F tabs = D2D1::RectF(16.0f, 8.0f, ctx.width() - 16.0f, 8.0f + kTabsH);
-    if (ctx.tabs(800, tabs, tab_labels(), &active_tab_)) invalidate();
+    // tabs() claims base+1 through base+count, so this base is kept clear of
+    // every other id in this window.
+    if (ctx.tabs(2000, tabs, tab_labels(), &active_tab_)) invalidate();
 
     const float footer_h = 48.0f;
     const D2D1_RECT_F body = D2D1::RectF(24.0f, tabs.bottom + 16.0f,
@@ -753,7 +755,7 @@ void SettingsWindow::on_render(ui::Ctx& ctx) {
         ctx.request_redraw();
     }
 
-    if (ctx.button(801, ui::rect(ctx.width() - 116.0f, ctx.height() - footer_h + 6.0f,
+    if (ctx.button(2500, ui::rect(ctx.width() - 116.0f, ctx.height() - footer_h + 6.0f,
                                  92.0f, 30.0f), L"Close", ButtonStyle::Normal)) {
         on_close_request();
     }

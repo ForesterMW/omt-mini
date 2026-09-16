@@ -66,7 +66,6 @@ private:
     void update_mouse(LPARAM lp);
 
     bool tracking_mouse_ = false;
-    bool pending_redraw_ = false;
 };
 
 // Applies the dark immersive title bar and rounded corners where supported.

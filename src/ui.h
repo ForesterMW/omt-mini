@@ -102,6 +102,9 @@ public:
     // Returns true when the selection changed.
     bool dropdown(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>& items, int* index);
     // Horizontal tab strip. Returns true when the active tab changed.
+    //
+    // Consumes ids id+1 through id+labels.size() for the individual tabs, so
+    // callers must leave that range free.
     bool tabs(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>& labels, int* active);
     void section_label(const D2D1_RECT_F& r, const std::wstring& label);
     void separator(float x0, float x1, float y);
@@ -135,17 +138,29 @@ private:
     Id open_dropdown_ = kNoId;
 
     // Deferred popup drawing so dropdown lists paint above everything else.
+    //
+    // The selection is carried as a value, never as a pointer into the caller.
+    // The popup is drawn from end(), by which time the caller's local index
+    // variable has already gone out of scope, so writing through a pointer to
+    // it would be writing to dead stack.
     struct PendingPopup {
         D2D1_RECT_F anchor;
         std::vector<std::wstring> items;
-        int*        index = nullptr;
+        int         selected = -1;
         Id          id = kNoId;
     };
     PendingPopup popup_;
     bool popup_pending_ = false;
-    // Set when end() commits a selection; read by dropdown() on the next
-    // frame, which is why it deliberately survives begin().
+    // Set when end() commits a selection; applied by dropdown() on the next
+    // frame, which is why these deliberately survive begin().
     Id   dropdown_changed_ = kNoId;
+    int  dropdown_value_ = -1;
+
+    // Every id claimed this frame. Two widgets sharing one id fight over the
+    // active state: whichever draws first eats the release and the other never
+    // sees its click, which shows up as a control that works only sometimes.
+    void claim(Id id);
+    std::vector<Id> claimed_;
 
     std::map<Id, float> anim_;
     std::map<Id, size_t> caret_;

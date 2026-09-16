@@ -121,8 +121,10 @@ void Window::hide() { if (hwnd_) ShowWindow(hwnd_, SW_HIDE); }
 bool Window::visible() const { return hwnd_ && IsWindowVisible(hwnd_); }
 
 void Window::invalidate() {
-    if (!hwnd_ || pending_redraw_) return;
-    pending_redraw_ = true;
+    if (!hwnd_) return;
+    // No local "already pending" guard: Windows coalesces overlapping update
+    // regions into a single WM_PAINT by itself, and a guard that latched on a
+    // paint that never arrived would silently freeze the window.
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -152,7 +154,6 @@ void Window::center_on_cursor() {
 void Window::render_frame() {
     if (!hwnd_ || !surface_.valid() || in_render_) return;
     in_render_ = true;
-    pending_redraw_ = false;
 
     if (surface_.begin_frame()) {
         surface_.d3d_target();
