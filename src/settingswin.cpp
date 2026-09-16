@@ -339,7 +339,7 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                 invalidate();
             }
         } else if (announcer().is_announced(m.address)) {
-            ctx.badge(rowr.right - 250.0f, rowr.top + 9.0f, 18.0f, L"on mDNS",
+            ctx.badge(rowr.right - 250.0f, rowr.top + 9.0f, 18.0f, L"mDNS",
                       theme().ok);
         }
 

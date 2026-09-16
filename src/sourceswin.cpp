@@ -447,7 +447,7 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         // Being announced means the rest of the network can see it too, which
         // is worth saying on the row rather than only in settings.
         if (s.is_manual && announcer().is_announced(s.address))
-            add_tag(L"on mDNS", theme().ok);
+            add_tag(L"mDNS", theme().ok);
 
         // What the sender says it is. Green for another OMT Mini, so a feed
         // that will behave exactly like this one is obvious at a glance.
