@@ -55,6 +55,14 @@ struct Settings {
     bool        multiview_fullscreen = false;
     std::vector<std::string> multiview_sources;   // one per tile, may be empty
 
+    // The multiview as an OMT source for other machines. Runs with or without
+    // the window, which is what makes a headless wall possible.
+    bool        multiview_output_enabled = false;
+    std::string multiview_output_name = "Multiview";
+    int         multiview_output_width  = 1920;
+    int         multiview_output_height = 1080;
+    int         multiview_output_fps    = 25;
+
     // ---- Webcam output ----
     std::string webcam_source;                // OMT address to feed the vcam
     int         webcam_width      = 1280;

@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 852 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 896 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -43,6 +43,11 @@ Mini and go straight to full screen.
 Tiles receive in OMT's **preview mode** by default, which is the sender's own
 one eighth resolution stream, so sixteen tiles cost a fraction of sixteen full
 feeds. Switch to full feeds from the toolbar if you need to see detail.
+
+**Multiview as a source.** The wall can be sent to the network as a single OMT
+source, so one machine builds it and every other machine just receives it. It
+does not need the window open to do that, so a spare box can build a wall
+headless and hand it to the gallery.
 
 **Webcam output.** Receives an OMT source and presents it to other applications
 as a normal camera named "OMT Mini Virtual Camera", so you can put a network
@@ -125,6 +130,25 @@ full feeds from the toolbar when you need detail.
 Changing layout reuses the receivers already running rather than reconnecting
 everything, and a tile whose source is not up yet keeps retrying, since a wall
 gets left running for hours.
+
+When the pointer stops moving, or leaves the window, the toolbar and the tile
+labels both fade out and you are left with nothing but pictures. Tally stays
+put: it is the one thing always worth seeing.
+
+#### Sending the wall to other machines
+
+**Settings > Multiview**, the toolbar button, or the Multiview output row in the
+source list. The wall is composed to a real frame, labelled and tallied, and
+published as an ordinary OMT source that anything can receive, including another
+copy of OMT Mini.
+
+It is independent of the window. Close the wall and it keeps sending; turn on
+**Start sending when OMT Mini launches** and leave **open the window** off, and
+the machine builds and sends a wall with nothing on screen at all.
+
+Resolution and frame rate are configurable, 1080p25 by default. The composed
+frame is built on the GPU and read back once per frame, so the cost is the
+readback rather than sixteen decodes twice over.
 
 ### Addresses
 
@@ -270,7 +294,7 @@ follow what they do by hand.
 
 ## How it is put together
 
-About 11,900 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
+About 12,800 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
 framework or package manager. The only runtime dependencies are Windows itself
 and the two OMT DLLs.
 
@@ -285,7 +309,7 @@ and the two OMT DLLs.
 | `src/instance.h` | Finding and shutting down a running copy, shared with the installer |
 | `src/netinfo.*` | Local address, host resolution, and reading back which port a sender actually bound to |
 | `src/scan.*` | Walking a host's port range to find every sender on it |
-| `src/multiview.*` | The multiview window and its per tile receivers |
+| `src/multiview.*` | The multiview engine, its window, and the output that composes it into an OMT sender |
 | `src/viewer.*` | A viewer window and its receiver thread |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |
 | `src/webcam.*` | Receiver writing into a shared memory ring that the filter reads |
@@ -314,7 +338,8 @@ and the two OMT DLLs.
   further and confirms each hit properly, but it can only find senders that
   report their own information, which is how it tells OMT apart from anything
   else holding a port open.
-- Multiview has no audio. It is a wall, not a monitoring position.
+- Multiview has no audio, whether on screen or sent. It is a wall, not a
+  monitoring position.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 

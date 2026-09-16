@@ -2,11 +2,13 @@
 #include "app.h"
 #include "settings.h"
 #include "discovery.h"
+#include "multiview.h"
 #include "capture.h"
 #include "webcam.h"
 #include "omt.h"
 #include "update.h"
 #include "discovery.h"
+#include "multiview.h"
 
 #include <shellapi.h>
 #include <algorithm>
@@ -24,7 +26,8 @@ constexpr float kLabelW = 190.0f;
 
 const std::vector<std::wstring>& tab_labels() {
     static const std::vector<std::wstring> v = {
-        L"General", L"Sources", L"Network", L"Viewer", L"Desktop", L"Webcam", L"About"
+        L"General", L"Sources", L"Network", L"Viewer", L"Desktop", L"Webcam",
+        L"Multiview", L"About"
     };
     return v;
 }
@@ -93,6 +96,7 @@ void SettingsWindow::open_or_focus(int tab) {
     port_start_text_   = std::to_wstring(cfg.port_start);
     port_end_text_     = std::to_wstring(cfg.port_end);
     capture_name_text_ = util::widen(cfg.capture_name);
+    mv_name_text_      = util::widen(cfg.multiview_output_name);
     monitors_          = DesktopCapture::enumerate_monitors();
 
     if (hwnd_) {
@@ -101,7 +105,7 @@ void SettingsWindow::open_or_focus(int tab) {
         invalidate();
         return;
     }
-    if (!create(L"OMT Mini Settings", 700, 580, true)) return;
+    if (!create(L"OMT Mini Settings", 780, 600, true)) return;
     center_on_cursor();
     show();
 }
@@ -110,6 +114,8 @@ bool SettingsWindow::on_close_request() {
     Settings& cfg = settings();
     cfg.capture_name = util::narrow(capture_name_text_);
     if (cfg.capture_name.empty()) cfg.capture_name = "Desktop";
+    cfg.multiview_output_name = util::narrow(mv_name_text_);
+    if (cfg.multiview_output_name.empty()) cfg.multiview_output_name = "Multiview";
     cfg.save();
     hide();
     return false;
@@ -605,6 +611,102 @@ void SettingsWindow::tab_webcam(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     }
 }
 
+// ---- Multiview ---------------------------------------------------------
+void SettingsWindow::tab_multiview(ui::Ctx& ctx, const D2D1_RECT_F& area) {
+    Settings& cfg = settings();
+    const bool sending = multiview_output().running();
+    float y = area.top + 4.0f;
+
+    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 40.0f),
+                     L"The multiview can be sent to other machines as a single OMT "
+                     L"source. It does not need the window open to do it.",
+                     Font::Small, theme().text_dim);
+    y += 46.0f;
+
+    ctx.text(ui::rect(area.left, y, kLabelW, 26.0f), L"Source name", Font::Body, theme().text);
+    if (ctx.text_field(801, D2D1::RectF(area.left + kLabelW, y, area.right, y + 28.0f),
+                       &mv_name_text_, L"Multiview"))
+        dirty_ = true;
+    y += 42.0f;
+
+    ctx.text(ui::rect(area.left, y, kLabelW, 26.0f), L"Resolution", Font::Body, theme().text);
+    static const std::vector<std::wstring> sizes = {
+        L"1920 x 1080", L"1600 x 900", L"1280 x 720", L"960 x 540"
+    };
+    static const int size_w[4] = { 1920, 1600, 1280, 960 };
+    static const int size_h[4] = { 1080,  900,  720,  540 };
+    int size_index = 0;
+    for (int i = 0; i < 4; ++i)
+        if (size_w[i] == cfg.multiview_output_width) size_index = i;
+    if (ctx.dropdown(802, D2D1::RectF(area.left + kLabelW, y, area.left + kLabelW + 160.0f,
+                                      y + 28.0f), sizes, &size_index)) {
+        cfg.multiview_output_width  = size_w[size_index];
+        cfg.multiview_output_height = size_h[size_index];
+        dirty_ = true;
+    }
+
+    ctx.text(ui::rect(area.left + kLabelW + 176.0f, y, 40.0f, 26.0f), L"fps", Font::Body,
+             theme().text_dim);
+    int fps_index = index_of(kFpsValues, 6, cfg.multiview_output_fps, 2);
+    if (ctx.dropdown(803, D2D1::RectF(area.left + kLabelW + 216.0f, y,
+                                      area.left + kLabelW + 306.0f, y + 28.0f),
+                     fps_items(), &fps_index)) {
+        cfg.multiview_output_fps = kFpsValues[fps_index];
+        dirty_ = true;
+    }
+    y += 40.0f;
+
+    if (sending) {
+        ctx.text(ui::rect(area.left, y, area.right - area.left, 18.0f),
+                 L"Changes apply the next time the output starts.", Font::Small,
+                 theme().warn, Align::Left, false);
+    }
+    y += 26.0f;
+
+    ctx.separator(area.left, area.right, y);
+    y += 14.0f;
+
+    if (ctx.checkbox(804, ui::rect(area.left, y, 420.0f, 24.0f),
+                     &cfg.multiview_output_enabled,
+                     L"Start sending the multiview when OMT Mini launches"))
+        dirty_ = true;
+    y += 30.0f;
+
+    if (ctx.checkbox(805, ui::rect(area.left, y, 420.0f, 24.0f), &cfg.multiview_autostart,
+                     L"Also open the multiview window at launch"))
+        dirty_ = true;
+    y += 28.0f;
+
+    ctx.text_wrapped(D2D1::RectF(area.left + 28.0f, y, area.right, y + 34.0f),
+                     L"Leave this off to run headless: the wall is built and sent, with "
+                     L"nothing on screen on this machine.",
+                     Font::Small, theme().text_dim);
+    y += 42.0f;
+
+    if (ctx.button(806, ui::rect(area.left, y, 160.0f, 32.0f),
+                   sending ? L"Stop sending" : L"Start sending",
+                   sending ? ButtonStyle::Danger : ButtonStyle::Primary)) {
+        cfg.multiview_output_name = util::narrow(mv_name_text_);
+        if (cfg.multiview_output_name.empty()) cfg.multiview_output_name = "Multiview";
+        cfg.save();
+        App::instance().toggle_multiview_output();
+        invalidate();
+    }
+
+    if (ctx.button(807, ui::rect(area.left + 172.0f, y, 150.0f, 32.0f), L"Open the wall",
+                   ButtonStyle::Normal))
+        App::instance().show_multiview();
+
+    const auto out = multiview_output().stats();
+    if (out.running && out.fps > 0.0f) {
+        ctx.text(ui::rect(area.left + 334.0f, y, area.right - area.left - 334.0f, 32.0f),
+                 fmt(L"Live, %d receiver%s", out.connections,
+                     out.connections == 1 ? L"" : L"s"),
+                 Font::Small, theme().ok);
+        ctx.request_redraw();
+    }
+}
+
 // ---- About and updates -------------------------------------------------
 void SettingsWindow::tab_about(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     Settings& cfg = settings();
@@ -767,6 +869,7 @@ void SettingsWindow::on_render(ui::Ctx& ctx) {
         case 3: tab_viewer(ctx, body);  break;
         case 4: tab_desktop(ctx, body); break;
         case 5: tab_webcam(ctx, body);  break;
+        case 6: tab_multiview(ctx, body); break;
         default: tab_about(ctx, body);  break;
     }
 

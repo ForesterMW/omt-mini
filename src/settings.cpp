@@ -105,6 +105,12 @@ void Settings::load() {
         multiview_sources.push_back(it->second);
     }
 
+    multiview_output_enabled = get_bool(kv, "multiview_output_enabled", multiview_output_enabled);
+    multiview_output_name    = get_str(kv, "multiview_output_name", multiview_output_name);
+    multiview_output_width   = clampi(get_int(kv, "multiview_output_width", multiview_output_width), 320, 3840);
+    multiview_output_height  = clampi(get_int(kv, "multiview_output_height", multiview_output_height), 180, 2160);
+    multiview_output_fps     = clampi(get_int(kv, "multiview_output_fps", multiview_output_fps), 1, 60);
+
     webcam_source           = get_str(kv, "webcam_source", webcam_source);
     webcam_width            = clampi(get_int(kv, "webcam_width", webcam_width), 160, 3840);
     webcam_height           = clampi(get_int(kv, "webcam_height", webcam_height), 120, 2160);
@@ -183,6 +189,12 @@ void Settings::save() const {
     putb("multiview_fullscreen", multiview_fullscreen);
     for (size_t i = 0; i < multiview_sources.size(); ++i)
         puts_("multiview_source." + std::to_string(i), multiview_sources[i]);
+
+    putb("multiview_output_enabled", multiview_output_enabled);
+    puts_("multiview_output_name", multiview_output_name);
+    puti("multiview_output_width", multiview_output_width);
+    puti("multiview_output_height", multiview_output_height);
+    puti("multiview_output_fps", multiview_output_fps);
 
     out += "\r\n# Webcam output\r\n";
     puts_("webcam_source", webcam_source);

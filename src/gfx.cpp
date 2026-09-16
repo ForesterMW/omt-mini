@@ -111,6 +111,7 @@ ComPtr<ID3D11Buffer>          g_video_cb;
 ComPtr<ID3D11BlendState>      g_blend_opaque;
 ComPtr<ID3D11RasterizerState> g_raster;
 ComPtr<IDWriteTextFormat>     g_fonts[6];
+ComPtr<ID3D11Multithread>     g_multithread;
 bool          g_ready = false;
 bool          g_warp  = false;
 std::wstring  g_error;
@@ -290,12 +291,11 @@ bool Device::init() {
 
     // Video arrives on receiver threads which upload straight into their own
     // textures, so the immediate context must be thread safe.
-    {
-        ComPtr<ID3D11Multithread> mt;
-        if (SUCCEEDED(g_ctx->QueryInterface(__uuidof(ID3D11Multithread), mt.put_void())))
-            mt->SetMultithreadProtected(TRUE);
-        else
-            util::logf("gfx: ID3D11Multithread unavailable");
+    if (SUCCEEDED(g_ctx->QueryInterface(__uuidof(ID3D11Multithread),
+                                        g_multithread.put_void()))) {
+        g_multithread->SetMultithreadProtected(TRUE);
+    } else {
+        util::logf("gfx: ID3D11Multithread unavailable");
     }
 
     ComPtr<IDXGIDevice> dxgi_device;
@@ -321,7 +321,9 @@ bool Device::init() {
     }
 
     D2D1_FACTORY_OPTIONS opts{};
-    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1),
+    // Multi threaded: the multiview output composites and labels its frames
+    // on its own thread while the interface is drawing on this one.
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, __uuidof(ID2D1Factory1),
                            &opts, g_d2d_factory.put_void());
     if (FAILED(hr)) {
         g_error = L"Direct2D factory creation failed.";
@@ -349,7 +351,16 @@ bool Device::init() {
     return true;
 }
 
+void Device::lock() {
+    if (g_multithread) g_multithread->Enter();
+}
+
+void Device::unlock() {
+    if (g_multithread) g_multithread->Leave();
+}
+
 void Device::teardown() {
+    g_multithread.reset();
     for (auto& f : g_fonts) f.reset();
     g_raster.reset();
     g_blend_opaque.reset();
@@ -411,6 +422,12 @@ bool Surface::create(HWND hwnd) {
     desc.BufferCount = 2;
     desc.SwapEffect  = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     desc.AlphaMode   = DXGI_ALPHA_MODE_IGNORE;
+    // Without this DXGI defaults to STRETCH, and any moment the back buffer
+    // and the window disagree on size, which is every frame between a resize
+    // and ResizeBuffers, the whole picture including the interface is scaled
+    // to fit. Going full screen on a monitor of a different shape made that
+    // permanent enough to see.
+    desc.Scaling     = DXGI_SCALING_NONE;
 
     HRESULT hr = g_dxgi_factory->CreateSwapChainForHwnd(g_d3d.get(), hwnd, &desc,
                                                         nullptr, nullptr, swap_chain_.put());
@@ -418,6 +435,8 @@ bool Surface::create(HWND hwnd) {
         // FLIP_DISCARD needs Windows 10. Fall back for older systems.
         desc.SwapEffect  = DXGI_SWAP_EFFECT_DISCARD;
         desc.BufferCount = 1;
+        // The bitblt model has no NONE mode; stretching is all it offers.
+        desc.Scaling     = DXGI_SCALING_STRETCH;
         hr = g_dxgi_factory->CreateSwapChainForHwnd(g_d3d.get(), hwnd, &desc,
                                                     nullptr, nullptr, swap_chain_.put());
     }
@@ -575,6 +594,110 @@ void Surface::present(bool vsync) {
     current_rtv_ = nullptr;
 }
 
+// ---- OffscreenTarget ---------------------------------------------------
+bool OffscreenTarget::create(int width, int height) {
+    destroy();
+    if (!g_ready || width <= 0 || height <= 0) return false;
+
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width          = static_cast<UINT>(width);
+    td.Height         = static_cast<UINT>(height);
+    td.MipLevels      = 1;
+    td.ArraySize      = 1;
+    td.Format         = DXGI_FORMAT_B8G8R8A8_UNORM;
+    td.SampleDesc.Count = 1;
+    td.Usage          = D3D11_USAGE_DEFAULT;
+    td.BindFlags      = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    if (FAILED(g_d3d->CreateTexture2D(&td, nullptr, texture_.put()))) return false;
+
+    if (FAILED(g_d3d->CreateRenderTargetView(texture_.get(), nullptr, rtv_.put())))
+        return false;
+
+    D3D11_TEXTURE2D_DESC sd = td;
+    sd.Usage          = D3D11_USAGE_STAGING;
+    sd.BindFlags      = 0;
+    sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    if (FAILED(g_d3d->CreateTexture2D(&sd, nullptr, staging_.put()))) return false;
+
+    if (FAILED(g_d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                                                 dc_.put())))
+        return false;
+    dc_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+    ComPtr<IDXGISurface> dxgi_surface;
+    if (FAILED(texture_->QueryInterface(__uuidof(IDXGISurface), dxgi_surface.put_void())))
+        return false;
+
+    D2D1_BITMAP_PROPERTIES1 props{};
+    props.pixelFormat.format    = DXGI_FORMAT_B8G8R8A8_UNORM;
+    props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+    props.dpiX = 96.0f;
+    props.dpiY = 96.0f;
+    props.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    if (FAILED(dc_->CreateBitmapFromDxgiSurface(dxgi_surface.get(), &props, bitmap_.put())))
+        return false;
+
+    width_ = width;
+    height_ = height;
+    return true;
+}
+
+void OffscreenTarget::destroy() {
+    d2d_end();
+    if (dc_) dc_->SetTarget(nullptr);
+    bitmap_.reset();
+    dc_.reset();
+    rtv_.reset();
+    staging_.reset();
+    texture_.reset();
+    width_ = height_ = 0;
+}
+
+void OffscreenTarget::clear(const D2D1_COLOR_F& colour) {
+    if (!rtv_) return;
+    const float rgba[4] = { colour.r, colour.g, colour.b, colour.a };
+    g_ctx->ClearRenderTargetView(rtv_.get(), rgba);
+}
+
+ID2D1DeviceContext* OffscreenTarget::d2d_begin() {
+    if (!dc_ || !bitmap_) return nullptr;
+    if (!d2d_open_) {
+        dc_->SetTarget(bitmap_.get());
+        dc_->BeginDraw();
+        dc_->SetTransform(D2D1::Matrix3x2F::Identity());
+        d2d_open_ = true;
+    }
+    return dc_.get();
+}
+
+void OffscreenTarget::d2d_end() {
+    if (d2d_open_ && dc_) {
+        dc_->EndDraw();
+        dc_->SetTarget(nullptr);
+        d2d_open_ = false;
+    }
+}
+
+bool OffscreenTarget::read_back(std::vector<uint8_t>* pixels) {
+    if (!texture_ || !staging_ || !pixels) return false;
+    d2d_end();
+
+    g_ctx->CopyResource(staging_.get(), texture_.get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (FAILED(g_ctx->Map(staging_.get(), 0, D3D11_MAP_READ, 0, &mapped))) return false;
+
+    const size_t row = static_cast<size_t>(width_) * 4;
+    pixels->resize(row * static_cast<size_t>(height_));
+    const auto* src = static_cast<const uint8_t*>(mapped.pData);
+    for (int y = 0; y < height_; ++y)
+        std::memcpy(pixels->data() + static_cast<size_t>(y) * row,
+                    src + static_cast<size_t>(y) * mapped.RowPitch, row);
+
+    g_ctx->Unmap(staging_.get(), 0);
+    return true;
+}
+
 // ---- VideoTexture ------------------------------------------------------
 bool VideoTexture::ensure(int tex_width, int height, DXGI_FORMAT format,
                           bool alpha_plane, int alpha_w) {
@@ -724,13 +847,37 @@ void VideoTexture::release() {
 
 void VideoTexture::draw(Surface& surface, const D2D1_RECT_F& dest) {
     if (!luma_srv_ || !g_ready) return;
+    if (dest.right - dest.left < 1.0f || dest.bottom - dest.top < 1.0f) return;
+
+    surface.d3d_target();
+    surface.d3d_viewport(dest.left, dest.top,
+                         dest.right - dest.left, dest.bottom - dest.top);
+    draw_common();
+}
+
+void VideoTexture::draw_to(ID3D11RenderTargetView* target, const D2D1_RECT_F& dest) {
+    if (!luma_srv_ || !g_ready || !target) return;
 
     const float w = dest.right - dest.left;
     const float h = dest.bottom - dest.top;
     if (w < 1.0f || h < 1.0f) return;
 
-    surface.d3d_target();
-    surface.d3d_viewport(dest.left, dest.top, w, h);
+    ID3D11RenderTargetView* views[1] = { target };
+    g_ctx->OMSetRenderTargets(1, views, nullptr);
+
+    D3D11_VIEWPORT vp{};
+    vp.TopLeftX = dest.left;
+    vp.TopLeftY = dest.top;
+    vp.Width    = w;
+    vp.Height   = h;
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    g_ctx->RSSetViewports(1, &vp);
+
+    draw_common();
+}
+
+void VideoTexture::draw_common() {
 
     VideoCB cb{};
     cb.texSize[0] = static_cast<float>(tex_width_);

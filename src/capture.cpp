@@ -231,6 +231,10 @@ void DesktopCapture::run() {
     }
 
     // ---- sender ----
+    // Noted before the sender exists, so the port it takes can be identified
+    // rather than guessed at.
+    const auto ports_before = netinfo::listening_ports(cfg.port_start, cfg.port_end);
+
     omt::Sender sender;
     const std::string name = cfg.capture_name.empty() ? std::string("Desktop") : cfg.capture_name;
     if (!sender.open(name, static_cast<OMTQuality>(cfg.capture_quality))) {
@@ -393,11 +397,11 @@ void DesktopCapture::run() {
             // libomt does not report which port a sender bound to, so it is
             // read back from the system once the socket is up.
             if (stats_.connect_url.empty()) {
-                const auto ports = netinfo::listening_ports(cfg.port_start, cfg.port_end);
+                const int port = netinfo::port_opened_since(ports_before, cfg.port_start,
+                                                            cfg.port_end);
                 const std::string ip = netinfo::local_ipv4();
-                if (!ports.empty() && !ip.empty()) {
-                    stats_.connect_url =
-                        "omt://" + ip + ":" + std::to_string(ports.front());
+                if (port > 0 && !ip.empty()) {
+                    stats_.connect_url = "omt://" + ip + ":" + std::to_string(port);
                     util::logf("capture: reachable at %s", stats_.connect_url.c_str());
                 }
             }

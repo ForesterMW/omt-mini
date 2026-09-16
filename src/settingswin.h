@@ -23,6 +23,7 @@ private:
     void tab_viewer(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void tab_desktop(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void tab_webcam(ui::Ctx& ctx, const D2D1_RECT_F& area);
+    void tab_multiview(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void tab_about(ui::Ctx& ctx, const D2D1_RECT_F& area);
 
     int  active_tab_ = 0;
@@ -39,4 +40,5 @@ private:
     std::wstring manual_address_text_;
     std::wstring manual_name_text_;
     std::wstring manual_error_;
+    std::wstring mv_name_text_;
 };

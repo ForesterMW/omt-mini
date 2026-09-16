@@ -224,6 +224,9 @@ void ViewerWindow::receive_loop() {
 }
 
 bool ViewerWindow::chrome_visible() const {
+    // A pointer that has left the window means nobody is reaching for a
+    // control, so do not wait out the timeout.
+    if (input_.mouse_x < 0.0f) return false;
     return (util::now_ms() - last_activity_ms_) < kChromeTimeoutMs;
 }
 
@@ -239,6 +242,7 @@ void ViewerWindow::toggle_fullscreen() {
         MONITORINFO mi{ sizeof(mi) };
         if (!GetMonitorInfoW(mon, &mi)) return;
 
+        set_window_rounded(hwnd_, false);
         SetWindowLongW(hwnd_, GWL_STYLE, saved_style_ & ~WS_OVERLAPPEDWINDOW);
         SetWindowPos(hwnd_, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
                      mi.rcMonitor.right - mi.rcMonitor.left,
@@ -246,6 +250,7 @@ void ViewerWindow::toggle_fullscreen() {
                      SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         fullscreen_ = true;
     } else {
+        set_window_rounded(hwnd_, true);
         SetWindowLongW(hwnd_, GWL_STYLE, saved_style_);
         SetWindowPlacement(hwnd_, &saved_placement_);
         SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
@@ -260,6 +265,10 @@ void ViewerWindow::toggle_fullscreen() {
 
 bool ViewerWindow::on_message(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) {
     switch (msg) {
+        case WM_MOUSELEAVE:
+            invalidate();
+            break;
+
         case WM_MOUSEMOVE:
             last_activity_ms_ = util::now_ms();
             if (!timer_running_) {

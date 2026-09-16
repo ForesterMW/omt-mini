@@ -18,6 +18,7 @@
 #define WM_OMT_UPDATE   (WM_APP + 15)
 #define WM_OMT_INSTALL  (WM_APP + 16)
 #define WM_OMT_SCAN     (WM_APP + 17)
+#define WM_OMT_MVACTION (WM_APP + 18)
 
 class Window {
 public:
@@ -76,3 +77,6 @@ private:
 
 // Applies the dark immersive title bar and rounded corners where supported.
 void apply_window_theme(HWND hwnd);
+// Windows 11 rounds window corners, which in full screen leaves the desktop
+// showing through four notches. Square them off while covering the screen.
+void set_window_rounded(HWND hwnd, bool rounded);

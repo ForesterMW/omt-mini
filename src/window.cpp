@@ -9,6 +9,7 @@ namespace {
 constexpr UINT kDwmUseImmersiveDarkMode = 20;
 constexpr UINT kDwmWindowCornerPreference = 33;
 constexpr UINT kDwmCornerRound = 2;
+constexpr UINT kDwmCornerDoNotRound = 1;
 
 // GetDpiForWindow is Windows 10 1607 and later; fall back to the desktop DPI.
 UINT window_dpi(HWND hwnd) {
@@ -36,7 +37,11 @@ void apply_window_theme(HWND hwnd) {
     // Older Windows 10 builds used attribute 19 for the same thing.
     DwmSetWindowAttribute(hwnd, 19, &dark, sizeof(dark));
 
-    const DWORD corner = kDwmCornerRound;
+    set_window_rounded(hwnd, true);
+}
+
+void set_window_rounded(HWND hwnd, bool rounded) {
+    const DWORD corner = rounded ? kDwmCornerRound : kDwmCornerDoNotRound;
     DwmSetWindowAttribute(hwnd, kDwmWindowCornerPreference, &corner, sizeof(corner));
 }
 
@@ -154,6 +159,11 @@ void Window::center_on_cursor() {
 void Window::render_frame() {
     if (!hwnd_ || !surface_.valid() || in_render_) return;
     in_render_ = true;
+
+    // One frame is a sequence of target binds and draws, so it has to be
+    // atomic against anything else using the shared device, such as the
+    // multiview output composing on its own thread.
+    gfx::DeviceLock device_lock;
 
     if (surface_.begin_frame()) {
         surface_.d3d_target();

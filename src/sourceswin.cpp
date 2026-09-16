@@ -22,7 +22,7 @@ using ui::Font;
 namespace {
 constexpr float kRowHeight = 58.0f;
 constexpr float kHeaderH   = 60.0f;
-constexpr float kFooterH   = 92.0f;
+constexpr float kFooterH   = 132.0f;
 
 bool copy_to_clipboard(HWND owner, const std::wstring& text) {
     if (!OpenClipboard(owner)) return false;
@@ -111,12 +111,8 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
                    ButtonStyle::Normal))
         App::instance().show_settings(0);
 
-    if (ctx.button(14, ui::rect(ctx.width() - 216.0f, 16.0f, 96.0f, 28.0f), L"Multiview",
-                   ButtonStyle::Normal))
-        App::instance().show_multiview();
-
     // Add a source without going through Settings.
-    if (ctx.icon_button(13, ui::rect(ctx.width() - 252.0f, 16.0f, 28.0f, 28.0f),
+    if (ctx.icon_button(13, ui::rect(ctx.width() - 148.0f, 16.0f, 28.0f, 28.0f),
                         adding_ ? ui::Ctx::Glyph::Close : ui::Ctx::Glyph::Plus)) {
         adding_ = !adding_;
         add_error_.clear();
@@ -134,7 +130,7 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
         const float w = ctx.text_width(label, Font::Small) + 26.0f;
         if (ctx.button(12, ui::rect(ctx.width() - 124.0f - w, 16.0f, w, 28.0f), label,
                        ButtonStyle::Primary))
-            App::instance().show_settings(6);
+            App::instance().show_settings(7);
     }
 }
 
@@ -541,6 +537,40 @@ void SourcesWindow::draw_footer(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         App::instance().toggle_webcam();
         invalidate();
     }
+
+    // ---- multiview output ----
+    const auto mv = multiview_output().stats();
+    const float y2 = area.top + 94.0f;
+    ctx.text(ui::rect(20.0f, y2, 200.0f, 18.0f), L"Multiview output", Font::BodyBold,
+             theme().text, Align::Left, false);
+
+    std::wstring mv_sub;
+    if (mv.running && mv.fps > 0.0f) {
+        mv_sub = fmt(L"%dx%d  %.0f fps  %d receiver%s", mv.width, mv.height, mv.fps,
+                     mv.connections, mv.connections == 1 ? L"" : L"s");
+        if (!mv.connect_url.empty()) mv_sub += L"   " + util::widen(mv.connect_url);
+    } else if (mv.running) {
+        mv_sub = L"Starting";
+    } else if (!mv.error.empty()) {
+        mv_sub = util::widen(mv.error);
+    } else {
+        mv_sub = L"Send the multiview to other machines as one source";
+    }
+    ctx.text(ui::rect(20.0f, y2 + 18.0f, ctx.width() - 240.0f, 18.0f), mv_sub,
+             Font::Small, mv.error.empty() ? theme().text_dim : theme().warn,
+             Align::Left, false);
+
+    if (ctx.button(24, ui::rect(ctx.width() - 112.0f, y2 - 2.0f, 92.0f, 28.0f),
+                   multiview_output().running() ? L"Stop" : L"Start",
+                   multiview_output().running() ? ButtonStyle::Danger : ButtonStyle::Normal)) {
+        App::instance().toggle_multiview_output();
+        invalidate();
+    }
+
+    // Open the wall itself, which the output does not require.
+    if (ctx.button(25, ui::rect(ctx.width() - 210.0f, y2 - 2.0f, 90.0f, 28.0f),
+                   L"Open wall", ButtonStyle::Normal))
+        App::instance().show_multiview();
 }
 
 void SourcesWindow::on_render(ui::Ctx& ctx) {
@@ -570,5 +600,7 @@ void SourcesWindow::on_render(ui::Ctx& ctx) {
     }
 
     // Keep the footer counters live while something is running.
-    if (desktop_capture().running() || webcam().running()) ctx.request_redraw();
+    if (desktop_capture().running() || webcam().running() ||
+        multiview_output().running())
+        ctx.request_redraw();
 }

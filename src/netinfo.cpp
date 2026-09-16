@@ -172,4 +172,12 @@ std::vector<int> listening_ports(int low, int high) {
     return ports;
 }
 
+int port_opened_since(const std::vector<int>& before, int low, int high) {
+    const auto now = listening_ports(low, high);
+    for (int port : now)
+        if (std::find(before.begin(), before.end(), port) == before.end()) return port;
+    return 0;
+}
+
 } // namespace netinfo
+

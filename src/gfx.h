@@ -71,6 +71,22 @@ public:
     // Set if the device was created without hardware support.
     static bool is_warp();
     static const std::wstring& error();
+
+    // Multithread protection makes individual calls safe, but not a sequence
+    // of them: two threads each binding a render target and then drawing would
+    // interleave and draw into the wrong one. Anything that binds state and
+    // then draws must hold this for the whole sequence.
+    static void lock();
+    static void unlock();
+};
+
+// RAII for Device::lock.
+class DeviceLock {
+public:
+    DeviceLock() { Device::lock(); }
+    ~DeviceLock() { Device::unlock(); }
+    DeviceLock(const DeviceLock&) = delete;
+    DeviceLock& operator=(const DeviceLock&) = delete;
 };
 
 // ---- text --------------------------------------------------------------
@@ -128,6 +144,42 @@ private:
     bool occluded_ = false;
 };
 
+// ---- offscreen target --------------------------------------------------
+// A render target that is not a window, for composing a frame to send rather
+// than to show. Carries its own Direct2D context so overlays can be drawn onto
+// it, and a staging texture for getting the result back to main memory.
+class OffscreenTarget {
+public:
+    ~OffscreenTarget() { destroy(); }
+
+    bool create(int width, int height);
+    void destroy();
+
+    void clear(const D2D1_COLOR_F& colour);
+    ID3D11RenderTargetView* rtv() const { return rtv_.get(); }
+
+    // Direct2D pass over the same surface. Must not be open while issuing D3D
+    // draws, exactly as with a window.
+    ID2D1DeviceContext* d2d_begin();
+    void d2d_end();
+
+    // Copies the composed frame into main memory as tightly packed BGRA.
+    bool read_back(std::vector<uint8_t>* pixels);
+
+    int  width()  const { return width_; }
+    int  height() const { return height_; }
+    bool valid()  const { return texture_.get() != nullptr; }
+
+private:
+    ComPtr<ID3D11Texture2D>        texture_;
+    ComPtr<ID3D11Texture2D>        staging_;
+    ComPtr<ID3D11RenderTargetView> rtv_;
+    ComPtr<ID2D1DeviceContext>     dc_;
+    ComPtr<ID2D1Bitmap1>           bitmap_;
+    int  width_ = 0, height_ = 0;
+    bool d2d_open_ = false;
+};
+
 // ---- video texture -----------------------------------------------------
 // Owns the GPU texture(s) for one decoded OMT video frame and draws them with
 // the appropriate conversion shader.
@@ -142,6 +194,8 @@ public:
 
     // Draws into dest (pixels, already letterboxed by the caller).
     void draw(Surface& surface, const D2D1_RECT_F& dest);
+    // Same, onto any render target rather than a window.
+    void draw_to(ID3D11RenderTargetView* target, const D2D1_RECT_F& dest);
 
     int  width()  const { return width_; }
     int  height() const { return height_; }
@@ -151,6 +205,8 @@ public:
 
 private:
     bool ensure(int tex_width, int height, DXGI_FORMAT format, bool alpha_plane, int alpha_w);
+    // Shader and state setup, once the target and viewport are bound.
+    void draw_common();
 
     ComPtr<ID3D11Texture2D>          luma_;
     ComPtr<ID3D11ShaderResourceView> luma_srv_;

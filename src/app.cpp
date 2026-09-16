@@ -27,6 +27,7 @@ enum MenuId : UINT {
     kIdOpenLog        = 3006,
     kIdUpdate         = 3007,
     kIdMultiview      = 3008,
+    kIdMultiviewOut   = 3009,
     kIdExit           = 3010,
 };
 
@@ -188,6 +189,8 @@ void App::show_tray_menu() {
                 kIdDesktopCapture, L"Desktop capture");
     AppendMenuW(menu, MF_STRING | (webcam().running() ? MF_CHECKED : 0),
                 kIdWebcam, L"Webcam output");
+    AppendMenuW(menu, MF_STRING | (multiview_output().running() ? MF_CHECKED : 0),
+                kIdMultiviewOut, L"Multiview output");
 
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kIdSettings, L"Settings...");
@@ -244,6 +247,23 @@ void App::close_all_viewers() {
 void App::show_sources() {
     if (!sources_window_) sources_window_ = std::make_unique<SourcesWindow>();
     sources_window_->open_or_focus();
+}
+
+bool App::toggle_multiview_output() {
+    if (multiview_output().running()) {
+        multiview_output().stop();
+        settings().multiview_output_enabled = false;
+        settings().save();
+        return false;
+    }
+    if (!multiview_output().start()) {
+        MessageBoxW(nullptr, L"The multiview output could not start. See the log.",
+                    L"OMT Mini", MB_OK | MB_ICONWARNING);
+        return false;
+    }
+    settings().multiview_output_enabled = true;
+    settings().save();
+    return true;
 }
 
 void App::show_multiview() {
@@ -421,11 +441,12 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             switch (id) {
                 case kIdShowSources:    show_sources(); return 0;
                 case kIdMultiview:      show_multiview(); return 0;
+                case kIdMultiviewOut:   toggle_multiview_output(); return 0;
                 case kIdSettings:       show_settings(0); return 0;
                 case kIdCloseViewers:   close_all_viewers(); return 0;
                 case kIdDesktopCapture: toggle_desktop_capture(); return 0;
                 case kIdWebcam:         toggle_webcam(); return 0;
-                case kIdUpdate:         show_settings(6); return 0;
+                case kIdUpdate:         show_settings(7); return 0;
                 case kIdOpenLog:
                     ShellExecuteW(nullptr, L"open", util::config_dir().c_str(),
                                   nullptr, nullptr, SW_SHOWNORMAL);
@@ -483,6 +504,9 @@ bool App::init(HINSTANCE instance) {
         WebcamOutput::filter_registered())
         webcam().start(cfg.webcam_source);
 
+    // The output runs whether or not the window is open: a machine can build a
+    // wall and hand it to everyone else without showing it locally.
+    if (cfg.multiview_output_enabled) multiview_output().start();
     if (cfg.multiview_autostart) show_multiview();
 
     if (settings().check_updates_on_launch) {
@@ -506,6 +530,7 @@ void App::quit() {
     sources_window_.reset();
     settings_window_.reset();
 
+    multiview_output().stop();
     webcam().stop();
     desktop_capture().stop();
     discovery().stop();

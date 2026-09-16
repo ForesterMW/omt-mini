@@ -26,6 +26,9 @@ public:
     void show_sources();
     void show_settings(int tab = 0);
     void show_multiview();
+    // Starts or stops the multiview as an OMT source. Independent of the
+    // window, so it keeps sending with nothing open.
+    bool toggle_multiview_output();
     bool toggle_desktop_capture();
     bool toggle_webcam();
     // Requests the update install. Safe to call from inside a window's paint:

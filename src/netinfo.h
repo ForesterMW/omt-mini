@@ -27,4 +27,9 @@ bool port_open(const std::string& host, const std::string& port, int timeout_ms)
 // report which port a sender bound to, so it is read back from the system.
 std::vector<int> listening_ports(int low, int high);
 
+// The port a sender took, found by diffing what this process was listening on
+// before and after it was created. Exact, where picking the lowest or highest
+// is only a guess once more than one sender is running. 0 if it cannot be told.
+int port_opened_since(const std::vector<int>& before, int low, int high);
+
 } // namespace netinfo
