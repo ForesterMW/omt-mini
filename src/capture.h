@@ -30,6 +30,7 @@ struct CaptureStats {
     float    mbps = 0.0f;
     bool     audio = false;
     std::string address;      // full OMT address once announced
+    std::string connect_url;  // omt://ip:port, for reaching this across a subnet
     std::string error;
 };
 

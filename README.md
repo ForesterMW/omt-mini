@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 745 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 798 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -39,7 +39,9 @@ via WASAPI loopback.
 as a normal camera named "OMT Mini Virtual Camera", so you can put a network
 feed into Teams, Zoom, OBS or anything else that accepts a webcam.
 
-**The source list** tags what it finds. Anything advertised by the machine you
+**The source list** shows the address of every source beside its name, so the
+thing you would have to type into another machine is never something you have
+to go and look up. It tags what it finds. Anything advertised by the machine you
 are sitting at is marked `this machine`, so it is obvious at a glance which
 feeds are not crossing the network, and every source carries a tag saying what
 it reports itself to be. Another OMT Mini shows up in green.
@@ -95,11 +97,22 @@ Keyboard shortcuts in a viewer window:
 | `T` | Always on top |
 | Double click | Full screen |
 
+### Addresses
+
+Every source in the list carries an address on its second line: the resolved IP
+for a discovered source, or the `omt://host:port` for one added by hand. A
+viewer shows the same thing in its statistics panel.
+
+Desktop capture shows the address **other machines** should use to reach it,
+next to the Start button, with a Copy button. libomt does not report which port
+a sender bound to, so OMT Mini reads it back from the system rather than
+guessing, which means the address shown is the real one.
+
 ### Adding a source by address
 
 Discovery only reaches the local network. When a sender is somewhere it cannot
 be seen, a different subnet, the far end of a VPN, or a host where mDNS is
-blocked, add it under **Settings > Sources**.
+blocked, press **+** in the source list, or add it under **Settings > Sources**.
 
 Type an address and press Add:
 
@@ -113,6 +126,10 @@ Type an address and press Add:
 Port 6400 is assumed when you do not give one. Entries appear in the source
 list and the tray menu beside discovered ones, and can be viewed or used as the
 webcam source in exactly the same way.
+
+To remove one, click it in the source list to select it and press Remove. Only
+sources you added by hand can be removed: a discovered one is not yours to
+delete, and would simply come back.
 
 They are tagged `direct` and carry a status dot, checked every eight seconds
 with a plain TCP connect, which costs far less than standing up a receiver to
@@ -228,6 +245,7 @@ and the two OMT DLLs.
 | `src/update.*` | Update check and install over WinHTTP, with SHA-256 verification through BCrypt |
 | `src/discovery.*` | DNS-SD polling, hand added senders, and the reachability probe |
 | `src/instance.h` | Finding and shutting down a running copy, shared with the installer |
+| `src/netinfo.*` | Local address, host resolution, and reading back which port a sender actually bound to |
 | `src/viewer.*` | A viewer window and its receiver thread |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |
 | `src/webcam.*` | Receiver writing into a shared memory ring that the filter reads |

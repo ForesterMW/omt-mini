@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "omt.h"
 #include "update.h"
+#include "settings.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -18,6 +19,27 @@ namespace {
 constexpr float kRowHeight = 58.0f;
 constexpr float kHeaderH   = 60.0f;
 constexpr float kFooterH   = 92.0f;
+
+bool copy_to_clipboard(HWND owner, const std::wstring& text) {
+    if (!OpenClipboard(owner)) return false;
+    EmptyClipboard();
+
+    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL handle = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!handle) { CloseClipboard(); return false; }
+
+    if (void* target = GlobalLock(handle)) {
+        memcpy(target, text.c_str(), bytes);
+        GlobalUnlock(handle);
+        SetClipboardData(CF_UNICODETEXT, handle);
+    } else {
+        GlobalFree(handle);
+        CloseClipboard();
+        return false;
+    }
+    CloseClipboard();
+    return true;
+}
 
 std::wstring fmt(const wchar_t* format, ...) {
     wchar_t buf[512];
@@ -85,6 +107,14 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
                    ButtonStyle::Normal))
         App::instance().show_settings(0);
 
+    // Add a source without going through Settings.
+    if (ctx.icon_button(13, ui::rect(ctx.width() - 148.0f, 16.0f, 28.0f, 28.0f),
+                        adding_ ? ui::Ctx::Glyph::Close : ui::Ctx::Glyph::Plus)) {
+        adding_ = !adding_;
+        add_error_.clear();
+        invalidate();
+    }
+
     // A quiet indicator rather than a dialog. Pressing it opens the About tab,
     // where the install button lives.
     if (updater().update_available()) {
@@ -98,6 +128,73 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
                        ButtonStyle::Primary))
             App::instance().show_settings(6);
     }
+}
+
+void SourcesWindow::commit_add() {
+    Settings& cfg = settings();
+    const std::string normalized = omt::normalize_address(util::narrow(add_address_text_));
+    if (normalized.empty()) {
+        add_error_ = L"That address could not be understood.";
+        return;
+    }
+    const bool exists = std::any_of(cfg.manual_sources.begin(), cfg.manual_sources.end(),
+                                    [&](const ManualSource& m) { return m.address == normalized; });
+    if (exists) {
+        add_error_ = L"That address is already in the list.";
+        return;
+    }
+
+    ManualSource entry;
+    entry.address = normalized;
+    entry.name    = util::trim(util::narrow(add_name_text_));
+    cfg.manual_sources.push_back(std::move(entry));
+    cfg.save();
+    discovery().set_manual_sources(cfg.manual_sources);
+
+    add_address_text_.clear();
+    add_name_text_.clear();
+    add_error_.clear();
+    adding_ = false;
+}
+
+float SourcesWindow::draw_add_panel(ui::Ctx& ctx, float top) {
+    if (!adding_) return top;
+
+    const float height = add_error_.empty() ? 62.0f : 80.0f;
+    const D2D1_RECT_F panel = D2D1::RectF(0, top, ctx.width(), top + height);
+    ctx.fill_rect(panel, theme().panel_hi);
+    ctx.separator(0, ctx.width(), panel.bottom - 1.0f);
+
+    const float y = top + 10.0f;
+    if (ctx.text_field(30, D2D1::RectF(16.0f, y, ctx.width() * 0.52f, y + 28.0f),
+                       &add_address_text_, L"10.0.0.5  or  host:6400"))
+        add_error_.clear();
+    ctx.text_field(31, D2D1::RectF(ctx.width() * 0.52f + 8.0f, y,
+                                   ctx.width() - 176.0f, y + 28.0f),
+                   &add_name_text_, L"name (optional)");
+
+    const bool can_add = !util::trim(util::narrow(add_address_text_)).empty();
+    if (ctx.button(32, ui::rect(ctx.width() - 168.0f, y, 72.0f, 28.0f), L"Add",
+                   ButtonStyle::Primary, can_add) ||
+        (can_add && ctx.input().key == VK_RETURN)) {
+        commit_add();
+        invalidate();
+    }
+    if (ctx.button(33, ui::rect(ctx.width() - 88.0f, y, 72.0f, 28.0f), L"Cancel",
+                   ButtonStyle::Normal) ||
+        ctx.input().key == VK_ESCAPE) {
+        adding_ = false;
+        add_error_.clear();
+        invalidate();
+    }
+
+    ctx.text(ui::rect(16.0f, y + 30.0f, ctx.width() - 32.0f, 18.0f),
+             add_error_.empty() ? L"Port 6400 is assumed when none is given."
+                                : add_error_.c_str(),
+             Font::Small, add_error_.empty() ? theme().text_dim : theme().danger,
+             Align::Left, false);
+
+    return panel.bottom;
 }
 
 void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
@@ -114,6 +211,7 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     }
 
     scroll_.content_height = cached_.size() * kRowHeight + 8.0f;
+    std::string remove_address;
     ctx.begin_scroll(1, area, &scroll_);
 
     float y = area.top + 4.0f;
@@ -131,13 +229,24 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
 
         const auto id = static_cast<ui::Id>(100 + i * 4);
         const bool over = ctx.hovered(rowr);
-        const float t = ctx.animate(id, over ? 1.0f : 0.0f);
+        const bool selected = !selected_address_.empty() && selected_address_ == s.address;
+        const float t = ctx.animate(id, (over || selected) ? 1.0f : 0.0f);
 
-        ctx.fill_rect(rowr, over ? theme().panel_hi : theme().panel, ui::metric::kRadius);
+        // Selecting a row is what reveals Remove, so the whole row is a click
+        // target except where the action buttons sit.
+        const D2D1_RECT_F actions =
+            D2D1::RectF(rowr.right - 270.0f, rowr.top, rowr.right, rowr.bottom);
+        if (!ctx.hovered(actions) && ctx.clicked_area(id, rowr)) {
+            selected_address_ = selected ? std::string() : s.address;
+            invalidate();
+        }
+
+        ctx.fill_rect(rowr, (over || selected) ? theme().panel_hi : theme().panel,
+                      ui::metric::kRadius);
         if (t > 0.01f) {
-            auto edge = theme().accent;
-            edge.a = t * 0.5f;
-            ctx.stroke_rect(rowr, edge, 1.0f, ui::metric::kRadius);
+            auto edge = selected ? theme().accent : theme().accent;
+            edge.a = selected ? 0.9f : t * 0.5f;
+            ctx.stroke_rect(rowr, edge, selected ? 1.6f : 1.0f, ui::metric::kRadius);
         }
 
         // Status dot. Discovered sources are online by definition, so this only
@@ -159,7 +268,7 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         // not they are showing, so nothing jumps when the pointer arrives.
         float tag_x = text_left + std::min(230.0f, ctx.text_width(name, Font::BodyBold))
                     + 10.0f;
-        const float tag_limit = rowr.right - 210.0f;
+        const float tag_limit = rowr.right - 274.0f;
         const float tag_y = rowr.top + 9.0f;
 
         auto add_tag = [&](const std::wstring& label, const D2D1_COLOR_F& colour) {
@@ -183,13 +292,22 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
             add_tag(maker, theme().text_dim);
         }
 
-        std::wstring sub = s.is_manual ? util::widen(s.address) : util::widen(s.host);
+        // Second line is where you look for something to type into another
+        // machine, so it always carries an address.
+        std::wstring sub;
+        if (s.is_manual) {
+            sub = util::widen(s.address);
+        } else {
+            sub = util::widen(s.host);
+            if (!s.ip.empty()) sub += L"   " + util::widen(s.ip);
+        }
         if (s.is_manual && s.status == SourceStatus::Offline) sub += L"   not answering";
-        ctx.text(ui::rect(text_left, rowr.top + 28.0f, 320.0f, 18.0f),
+        ctx.text(ui::rect(text_left, rowr.top + 28.0f, 360.0f, 18.0f),
                  sub, Font::Small, theme().text_dim, Align::Left, false);
 
-        // Actions appear on hover to keep the list calm at rest.
-        if (over || t > 0.3f) {
+        // Actions appear on hover, or while the row is selected, to keep the
+        // list calm at rest.
+        if (over || selected || t > 0.3f) {
             const float bw = 76.0f;
             // Still openable when offline: a viewer shows "connecting" and
             // picks the source up the moment it comes back.
@@ -209,11 +327,33 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                 App::instance().toggle_webcam();
                 invalidate();
             }
+            // Only a source that was added by hand can be removed. A discovered
+            // one is not ours to delete: it would simply come back.
+            if (s.is_manual && selected) {
+                if (ctx.button(id + 3,
+                               ui::rect(rowr.right - bw - 12.0f - 96.0f - 88.0f,
+                                        rowr.top + 13.0f, 80.0f, 26.0f),
+                               L"Remove", ButtonStyle::Danger)) {
+                    remove_address = s.address;
+                }
+            }
         }
         y += kRowHeight;
     }
 
     ctx.end_scroll();
+
+    if (!remove_address.empty()) {
+        Settings& cfg = settings();
+        cfg.manual_sources.erase(
+            std::remove_if(cfg.manual_sources.begin(), cfg.manual_sources.end(),
+                           [&](const ManualSource& m) { return m.address == remove_address; }),
+            cfg.manual_sources.end());
+        cfg.save();
+        discovery().set_manual_sources(cfg.manual_sources);
+        if (selected_address_ == remove_address) selected_address_.clear();
+        invalidate();
+    }
 }
 
 void SourcesWindow::draw_footer(ui::Ctx& ctx, const D2D1_RECT_F& area) {
@@ -229,7 +369,13 @@ void SourcesWindow::draw_footer(ui::Ctx& ctx, const D2D1_RECT_F& area) {
              theme().text, Align::Left, false);
 
     std::wstring cap_sub;
-    if (cap.running && cap.width > 0) {
+    if (cap.running && cap.width > 0 && !cap.connect_url.empty()) {
+        // The address someone on another subnet would have to type in, which is
+        // otherwise impossible to find: libomt does not report the bound port.
+        cap_sub = fmt(L"%dx%d  %.0f fps  %d receiver%s   %S", cap.width, cap.height,
+                      cap.fps, cap.connections, cap.connections == 1 ? L"" : L"s",
+                      cap.connect_url.c_str());
+    } else if (cap.running && cap.width > 0) {
         cap_sub = fmt(L"%dx%d  %.0f fps  %d receiver%s", cap.width, cap.height,
                       cap.fps, cap.connections, cap.connections == 1 ? L"" : L"s");
     } else if (!cap.error.empty()) {
@@ -246,6 +392,16 @@ void SourcesWindow::draw_footer(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                    desktop_capture().running() ? ButtonStyle::Danger : ButtonStyle::Normal)) {
         App::instance().toggle_desktop_capture();
         invalidate();
+    }
+
+    if (!cap.connect_url.empty()) {
+        if (ctx.button(23, ui::rect(ctx.width() - 178.0f, y0 - 2.0f, 60.0f, 28.0f),
+                       L"Copy", ButtonStyle::Ghost)) {
+            if (copy_to_clipboard(hwnd(), util::widen(cap.connect_url))) {
+                toast_ = L"Address copied";
+                toast_until_ms_ = util::now_ms() + 2500;
+            }
+        }
     }
 
     // ---- webcam ----
@@ -281,14 +437,25 @@ void SourcesWindow::on_render(ui::Ctx& ctx) {
     ctx.fill_rect(D2D1::RectF(0, 0, ctx.width(), ctx.height()), theme().bg);
 
     draw_header(ctx);
+    const float list_top = draw_add_panel(ctx, kHeaderH);
 
     const D2D1_RECT_F footer =
         D2D1::RectF(0, ctx.height() - kFooterH, ctx.width(), ctx.height());
     const D2D1_RECT_F list =
-        D2D1::RectF(0, kHeaderH, ctx.width(), footer.top);
+        D2D1::RectF(0, list_top, ctx.width(), footer.top);
 
     draw_list(ctx, list);
     draw_footer(ctx, footer);
+
+    if (!toast_.empty() && util::now_ms() < toast_until_ms_) {
+        const float w = ctx.text_width(toast_, Font::Small) + 28.0f;
+        const D2D1_RECT_F pill = D2D1::RectF((ctx.width() - w) * 0.5f, ctx.height() - 132.0f,
+                                             (ctx.width() + w) * 0.5f, ctx.height() - 104.0f);
+        ctx.fill_rect(pill, gfx::rgb(0x0B0D10, 0.92f), 14.0f);
+        ctx.stroke_rect(pill, theme().border, 1.0f, 14.0f);
+        ctx.text(pill, toast_, Font::Small, theme().text, Align::Center);
+        ctx.request_redraw();
+    }
 
     // Keep the footer counters live while something is running.
     if (desktop_capture().running() || webcam().running()) ctx.request_redraw();

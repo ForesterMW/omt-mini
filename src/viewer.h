@@ -88,6 +88,8 @@ private:
     float volume_ = 1.0f;
     int   quality_index_ = 0;
     int64_t last_activity_ms_ = 0;
+    std::wstring address_line_;
+    int64_t      address_checked_ms_ = 0;
     bool  timer_running_ = false;
 
     WINDOWPLACEMENT saved_placement_{};

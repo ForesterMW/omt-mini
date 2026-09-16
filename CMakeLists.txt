@@ -72,6 +72,7 @@ set(OMTMINI_SOURCES
     src/audiocap.cpp
     src/uninstall.cpp
     src/update.cpp
+    src/netinfo.cpp
 )
 
 add_executable(OMTMini WIN32 ${OMTMINI_SOURCES} res/omtmini.rc)
@@ -81,7 +82,7 @@ target_link_libraries(OMTMini PRIVATE
     ole32 oleaut32 uuid
     shell32 shlwapi user32 gdi32 advapi32
     dwmapi winmm avrt
-    winhttp bcrypt ws2_32
+    winhttp bcrypt ws2_32 iphlpapi
 )
 set_target_properties(OMTMini PROPERTIES OUTPUT_NAME "OMTMini")
 

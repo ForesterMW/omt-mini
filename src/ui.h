@@ -90,6 +90,9 @@ public:
     bool button(Id id, const D2D1_RECT_F& r, const std::wstring& label,
                 ButtonStyle style = ButtonStyle::Normal, bool enabled = true);
     bool icon_button(Id id, const D2D1_RECT_F& r, Glyph g, const std::wstring& tooltip = L"");
+    // An invisible click target, for making a whole row selectable without
+    // drawing anything over it.
+    bool clicked_area(Id id, const D2D1_RECT_F& r);
     // A read only indicator lamp. Not clickable by design: this is a monitor
     // reporting what a source says about itself, not a control.
     void lamp(const D2D1_RECT_F& r, const std::wstring& label, bool lit,

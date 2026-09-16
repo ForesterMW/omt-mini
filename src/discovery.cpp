@@ -5,6 +5,7 @@
 #include "discovery.h"
 #include "omt.h"
 #include "settings.h"
+#include "netinfo.h"
 
 #include <algorithm>
 
@@ -159,6 +160,7 @@ void Discovery::probe_run() {
     const bool winsock_ready = WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
     if (!winsock_ready)
         util::logf("discovery: WSAStartup failed, reachability will stay unknown");
+    netinfo::init();
 
     // Eight seconds is frequent enough to notice a source going away without
     // being something anyone would feel.
@@ -179,6 +181,27 @@ void Discovery::probe_run() {
         {
             std::lock_guard<std::mutex> lock(manual_mutex_);
             targets = manual_;
+        }
+
+        // ---- resolve host names so the list can show an address ----
+        {
+            std::vector<std::string> hosts;
+            {
+                std::lock_guard<std::mutex> sources_lock(mutex_);
+                std::lock_guard<std::mutex> identity_lock(identity_mutex_);
+                for (const auto& source : sources_) {
+                    if (source.host.empty()) continue;
+                    if (resolved_.count(source.host)) continue;
+                    hosts.push_back(source.host);
+                }
+            }
+            for (const auto& host : hosts) {
+                if (!running_) break;
+                const std::string address = netinfo::resolve(host);
+                std::lock_guard<std::mutex> lock(identity_mutex_);
+                resolved_[host] = address;
+                if (!address.empty()) { status_changed_ = true; wake_ = true; }
+            }
         }
 
         // ---- identify anything newly seen ----
@@ -328,10 +351,13 @@ void Discovery::run() {
                 std::lock_guard<std::mutex> lock(identity_mutex_);
                 for (auto& entry : next) {
                     auto it = identity_.find(entry.address);
-                    if (it == identity_.end()) continue;
-                    entry.product      = it->second.product;
-                    entry.manufacturer = it->second.manufacturer;
-                    entry.is_omt_mini  = it->second.is_omt_mini;
+                    if (it != identity_.end()) {
+                        entry.product      = it->second.product;
+                        entry.manufacturer = it->second.manufacturer;
+                        entry.is_omt_mini  = it->second.is_omt_mini;
+                    }
+                    auto resolved = resolved_.find(entry.host);
+                    if (resolved != resolved_.end()) entry.ip = resolved->second;
                 }
             }
 

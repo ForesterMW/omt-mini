@@ -1,6 +1,7 @@
 #include "capture.h"
 #include "omt.h"
 #include "settings.h"
+#include "netinfo.h"
 
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -388,6 +389,18 @@ void DesktopCapture::run() {
                                  static_cast<float>(elapsed) / 1000.0f;
             stats_.address     = sender.address();
             stats_.running     = true;
+
+            // libomt does not report which port a sender bound to, so it is
+            // read back from the system once the socket is up.
+            if (stats_.connect_url.empty()) {
+                const auto ports = netinfo::listening_ports(cfg.port_start, cfg.port_end);
+                const std::string ip = netinfo::local_ipv4();
+                if (!ports.empty() && !ip.empty()) {
+                    stats_.connect_url =
+                        "omt://" + ip + ":" + std::to_string(ports.front());
+                    util::logf("capture: reachable at %s", stats_.connect_url.c_str());
+                }
+            }
             fps_window_frames = 0;
             fps_window_start  = util::now_ms();
         }

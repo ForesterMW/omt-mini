@@ -398,6 +398,10 @@ void Ctx::lamp(const D2D1_RECT_F& r, const std::wstring& label, bool lit,
     text(r, label, Font::BodyBold, fg, Align::Center);
 }
 
+bool Ctx::clicked_area(Id id, const D2D1_RECT_F& r) {
+    return consume_click(id, r);
+}
+
 bool Ctx::checkbox(Id id, const D2D1_RECT_F& r, bool* value, const std::wstring& label) {
     const bool clicked = consume_click(id, r);
     if (clicked && value) *value = !*value;

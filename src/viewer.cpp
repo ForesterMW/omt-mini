@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include "settings.h"
+#include "discovery.h"
 
 #include <objbase.h>
 #include <algorithm>
@@ -551,6 +552,24 @@ void ViewerWindow::draw_stats(ui::Ctx& ctx) {
     std::vector<Row> rows;
 
     rows.push_back({ L"Source", title_ });
+
+    // The address another machine would use to reach this source. Refreshed
+    // occasionally rather than every frame: it does not change often, and the
+    // panel repaints with the video.
+    if (util::now_ms() - address_checked_ms_ > 2000) {
+        address_checked_ms_ = util::now_ms();
+        if (omt::is_url_address(address_)) {
+            address_line_ = util::widen(address_);
+        } else {
+            address_line_.clear();
+            for (const auto& source : discovery().sources()) {
+                if (source.address != address_) continue;
+                address_line_ = util::widen(source.ip.empty() ? source.host : source.ip);
+                break;
+            }
+        }
+    }
+    if (!address_line_.empty()) rows.push_back({ L"Address", address_line_ });
     {
         std::lock_guard<std::mutex> lock(meta_mutex_);
         if (!sender_product_.empty()) rows.push_back({ L"Sender", sender_product_ });

@@ -33,6 +33,10 @@ struct DiscoveredSource {
     std::string product;
     std::string manufacturer;
     bool        is_omt_mini = false;
+
+    // Resolved for display, so the address to reach a source by hand is
+    // visible without going and looking it up.
+    std::string ip;
 };
 
 class Discovery {
@@ -69,6 +73,7 @@ private:
     std::thread                   probe_thread_;
     mutable std::mutex            identity_mutex_;
     std::map<std::string, DiscoveredSource> identity_;
+    std::map<std::string, std::string>      resolved_;   // host -> address
     std::atomic<bool>             status_changed_{false};
     std::atomic<bool>             probe_now_{false};
 };

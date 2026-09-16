@@ -18,10 +18,18 @@ protected:
 
 private:
     void draw_header(ui::Ctx& ctx);
+    float draw_add_panel(ui::Ctx& ctx, float top);
+    void commit_add();
     void draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void draw_footer(ui::Ctx& ctx, const D2D1_RECT_F& area);
 
     ui::ScrollState scroll_;
     std::vector<DiscoveredSource> cached_;
-    int hovered_row_ = -1;
+    std::string  selected_address_;
+    bool         adding_ = false;
+    std::wstring add_address_text_;
+    std::wstring add_name_text_;
+    std::wstring add_error_;
+    std::wstring toast_;
+    int64_t      toast_until_ms_ = 0;
 };
