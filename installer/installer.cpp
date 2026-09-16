@@ -92,6 +92,50 @@ void pump_messages() {
     }
 }
 
+// A registered DirectShow filter is loaded into every process that lists
+// capture devices, and stays loaded until that process exits. Windows will not
+// let a loaded module be overwritten or deleted, but it will let it be renamed,
+// which is how installers replace a DLL that is in use. Anything still holding
+// the old copy keeps running it until it restarts; new loads get the new file.
+bool displace_locked_file(const std::wstring& path) {
+    for (int i = 0; i < 100; ++i) {
+        wchar_t suffix[24];
+        _snwprintf(suffix, 24, L".old%03d", i);
+        suffix[23] = L'\0';
+        const std::wstring aside = path + suffix;
+        if (GetFileAttributesW(aside.c_str()) != INVALID_FILE_ATTRIBUTES) continue;
+        if (MoveFileExW(path.c_str(), aside.c_str(), MOVEFILE_REPLACE_EXISTING))
+            return true;
+    }
+    return false;
+}
+
+// Clears out copies displaced by an earlier install. They become deletable once
+// whatever was holding them has exited, so this is best effort and silent.
+void sweep_displaced_files(const std::wstring& dir) {
+    // Matched in code rather than by the pattern: Windows wildcard matching
+    // against extensions has enough legacy quirks not to trust it with a
+    // delete.
+    auto is_displaced = [](const std::wstring& name) {
+        if (name.size() < 7) return false;
+        const std::wstring tail = name.substr(name.size() - 7);
+        if (tail.compare(0, 4, L".old") != 0) return false;
+        for (size_t i = 4; i < 7; ++i)
+            if (tail[i] < L'0' || tail[i] > L'9') return false;
+        return true;
+    };
+
+    WIN32_FIND_DATAW find{};
+    HANDLE handle = FindFirstFileW((dir + L"\\*").c_str(), &find);
+    if (handle == INVALID_HANDLE_VALUE) return;
+    do {
+        if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        if (!is_displaced(find.cFileName)) continue;
+        DeleteFileW((dir + L"\\" + find.cFileName).c_str());
+    } while (FindNextFileW(handle, &find));
+    FindClose(handle);
+}
+
 bool create_directories(const std::wstring& path) {
     return SHCreateDirectoryExW(nullptr, path.c_str(), nullptr) == ERROR_SUCCESS ||
            GetLastError() == ERROR_ALREADY_EXISTS ||
@@ -217,19 +261,31 @@ bool extract_entry(const std::wstring& self, const PayloadEntry& entry,
     pos.QuadPart = static_cast<LONGLONG>(entry.offset);
     SetFilePointerEx(src, pos, nullptr, FILE_BEGIN);
 
-    // A file can stay locked for a moment after the process holding it exits,
-    // so a sharing violation is worth retrying before giving up on it.
     const std::wstring out_path = dest_dir + L"\\" + entry.name;
+
+    auto open_destination = [&]() {
+        return CreateFileW(out_path.c_str(), GENERIC_WRITE, 0, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    };
+
+    // A file can still be locked briefly after the process holding it exits, so
+    // a sharing violation is worth a few retries first.
     HANDLE dst = INVALID_HANDLE_VALUE;
-    for (int attempt = 0; attempt < 20; ++attempt) {
-        dst = CreateFileW(out_path.c_str(), GENERIC_WRITE, 0, nullptr,
-                          CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        dst = open_destination();
         if (dst != INVALID_HANDLE_VALUE) break;
         const DWORD err = GetLastError();
         if (err != ERROR_SHARING_VIOLATION && err != ERROR_ACCESS_DENIED) break;
         Sleep(250);
         pump_messages();
     }
+
+    // Still held, so something long lived has it open. Move it aside and write
+    // the new file into the name it just vacated.
+    if (dst == INVALID_HANDLE_VALUE && displace_locked_file(out_path)) {
+        dst = open_destination();
+    }
+
     if (dst == INVALID_HANDLE_VALUE) {
         CloseHandle(src);
         return false;
@@ -290,6 +346,8 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
         }
     }
 
+    sweep_displaced_files(dir);
+
     if (g_progress) {
         SendMessageW(g_progress, PBM_SETRANGE32, 0, static_cast<LPARAM>(entries.size()));
         SendMessageW(g_progress, PBM_SETPOS, 0, 0);
@@ -303,11 +361,19 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
 
         if (!extract_entry(self, entries[i], dir)) {
             std::wstring message = L"Could not write " + entries[i].name + L".\n\n";
-            message += instance::running()
-                ? L"OMT Mini is still running. Right click its tray icon, choose "
-                  L"Exit, then try again."
-                : L"The file is locked or the folder is not writable. Check that "
-                  L"no antivirus is holding it.";
+            if (instance::running()) {
+                message += L"OMT Mini is still running. Right click its tray icon, "
+                           L"choose Exit, then try again.";
+            } else if (entries[i].name.find(L"vcam") != std::wstring::npos) {
+                message += L"The virtual camera is loaded by another application. "
+                           L"Windows loads it into any program that lists cameras, "
+                           L"and it stays loaded until that program closes.\n\n"
+                           L"Close Teams, Zoom, OBS, your browser or anything else "
+                           L"that has been near a camera, then try again.";
+            } else {
+                message += L"The file is locked, or the folder is not writable. "
+                           L"Check that no antivirus is holding it.";
+            }
             MessageBoxW(window, message.c_str(), kAppName, MB_OK | MB_ICONERROR);
             return false;
         }
