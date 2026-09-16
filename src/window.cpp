@@ -157,7 +157,7 @@ void Window::render_frame() {
 
     if (surface_.begin_frame()) {
         surface_.d3d_target();
-        surface_.clear(gfx::theme().bg);
+        surface_.clear(clear_colour());
         on_render_video();
 
         ID2D1DeviceContext* dc = surface_.d2d_begin();

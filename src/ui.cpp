@@ -45,6 +45,16 @@ void Ctx::begin(ID2D1DeviceContext* dc, float width, float height, Input* input)
 }
 
 void Ctx::end() {
+    // A popup whose owner was not drawn this frame cannot be dismissed by the
+    // code below, because that only runs for a popup that is still being laid
+    // out. Left alone it would keep owning every click in the window and no
+    // button anywhere would work again. Switching tab with a list open, or
+    // reopening the window on a different tab, both land here.
+    if (open_dropdown_ != kNoId && !popup_pending_) {
+        open_dropdown_ = kNoId;
+        needs_redraw_ = true;
+    }
+
     // Popup lists draw last so they sit above the rest of the window.
     if (popup_pending_) {
         const auto& p = popup_;

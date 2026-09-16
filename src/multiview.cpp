@@ -354,8 +354,9 @@ void MultiviewWindow::draw_toolbar(ui::Ctx& ctx, float alpha) {
 }
 
 void MultiviewWindow::on_render(ui::Ctx& ctx) {
-    ctx.fill_rect(D2D1::RectF(0, 0, ctx.width(), ctx.height()), gfx::rgb(0x070809));
-
+    // Deliberately no background fill here: on_render runs after the video has
+    // been drawn, so painting the window would cover every tile. The background
+    // between tiles comes from clear_colour().
     const auto rects = cells(ctx.width(), ctx.height());
     for (size_t i = 0; i < rects.size() && i < tiles_.size(); ++i)
         draw_tile_overlay(ctx, i, rects[i]);

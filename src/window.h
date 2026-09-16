@@ -44,6 +44,10 @@ protected:
     // Issuing D3D draws while D2D has a batch open on the same target is not
     // defined, so video rendering belongs here rather than in on_render.
     virtual void on_render_video() {}
+    // Background the frame is cleared to before any video is drawn. A window
+    // that shows video must not paint its own background in on_render, which
+    // runs afterwards and would cover it.
+    virtual D2D1_COLOR_F clear_colour() const { return gfx::theme().bg; }
     // Return true to swallow the message.
     virtual bool on_message(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) { return false; }
     virtual void on_resize(UINT width, UINT height) {}

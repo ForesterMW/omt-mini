@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 851 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 852 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -106,8 +106,25 @@ Keyboard shortcuts in a viewer window:
 | `T` | Always on top |
 | Double click | Full screen |
 
-The multiview window takes `F`, `F11`, `Esc` and double click for full screen
-too. Click any cell to choose what goes in it.
+### Multiview
+
+Open it from the tray menu or the **Multiview** button in the source list.
+
+Layouts are `2x2`, `3x2`, `3x3`, `4x3`, `4x4`, and the classic hero shapes
+`1 + 5` and `1 + 7`. Click any cell to choose what goes in it. Tally borders
+the whole cell, and the name and resolution sit along the bottom of it.
+
+`F`, `F11` or a double click goes full screen, `Esc` comes back. **Open at
+startup** is in the toolbar, and it remembers whether it was full screen.
+
+Tiles receive in OMT's **preview mode** by default, the sender's own one eighth
+resolution stream, and they suggest low quality, so a wall never becomes the
+reason a sender lifts its encoding for everyone else watching it. Switch to
+full feeds from the toolbar when you need detail.
+
+Changing layout reuses the receivers already running rather than reconnecting
+everything, and a tile whose source is not up yet keeps retrying, since a wall
+gets left running for hours.
 
 ### Addresses
 
@@ -253,7 +270,7 @@ follow what they do by hand.
 
 ## How it is put together
 
-About 11,800 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
+About 11,900 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
 framework or package manager. The only runtime dependencies are Windows itself
 and the two OMT DLLs.
 

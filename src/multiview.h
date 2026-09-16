@@ -73,6 +73,7 @@ public:
 protected:
     void on_render(ui::Ctx& ctx) override;
     void on_render_video() override;
+    D2D1_COLOR_F clear_colour() const override { return gfx::rgb(0x070809); }
     bool on_message(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) override;
     void on_closing() override;
     const wchar_t* class_name() const override { return L"OMTMiniMultiview"; }

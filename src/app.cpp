@@ -305,19 +305,30 @@ void App::install_update() {
     // Called from a button, which means from inside that window's paint. Doing
     // the work here would tear the window down while its own render is still
     // on the stack, so it is deferred to the tray window's message loop.
+    util::logf("update: install requested");
     if (hwnd_) PostMessageW(hwnd_, WM_OMT_INSTALL, 0, 0);
 }
 
 void App::do_install_update() {
     const UpdateInfo up = updater().info();
-    if (up.state != UpdateState::ReadyToInstall || up.downloaded_path.empty()) return;
+    if (up.state != UpdateState::ReadyToInstall || up.downloaded_path.empty()) {
+        // Logged rather than silent: an install that appears to do nothing is
+        // impossible to diagnose after the fact otherwise.
+        util::logf("update: install ignored (state=%d, path=%s)",
+                   static_cast<int>(up.state),
+                   up.downloaded_path.empty() ? "none" : "set");
+        return;
+    }
 
     if (!viewers_.empty() || desktop_capture().running() || webcam().running()) {
         const int answer = MessageBoxW(nullptr,
             L"Installing will close the viewers and stop desktop capture and the "
             L"webcam output.\n\nContinue?",
             L"OMT Mini", MB_YESNO | MB_ICONQUESTION);
-        if (answer != IDYES) return;
+        if (answer != IDYES) {
+            util::logf("update: install declined at the confirmation");
+            return;
+        }
     }
 
     util::logf("update: launching installer %s", util::narrow(up.downloaded_path).c_str());
