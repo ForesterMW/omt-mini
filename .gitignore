@@ -1,0 +1,19 @@
+# Build output
+build-win/
+build/
+build-tmp/
+dist/
+
+# Fetched OMT runtime (see scripts/fetch-omt.sh)
+external/omt/bin/
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.user
+Thumbs.db
+desktop.ini
+
+# Python bytecode from the helper scripts
+__pycache__/
+*.pyc

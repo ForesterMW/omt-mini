@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build, without the leading v
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 cmake zip
+
+      - name: Fetch the OMT runtime
+        run: ./scripts/fetch-omt.sh
+
+      - name: Build
+        run: VERSION=${{ steps.version.outputs.version }} ./scripts/cross-build.sh
+
+      - name: Package
+        run: VERSION=${{ steps.version.outputs.version }} ./scripts/package.sh
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/OMTMini-Setup-${{ steps.version.outputs.version }}.exe
+            dist/OMTMini-${{ steps.version.outputs.version }}-win64.zip
+            dist/SHA256SUMS-${{ steps.version.outputs.version }}.txt
+          generate_release_notes: true
+          draft: false

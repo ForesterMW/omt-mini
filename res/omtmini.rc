@@ -1,0 +1,33 @@
+#include <windows.h>
+#include "omtmini_version.h"
+
+1 ICON "omtmini.ico"
+1 24 "omtmini.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     OMTMINI_VERSION_FIELD
+PRODUCTVERSION  OMTMINI_VERSION_FIELD
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "OMT Mini"
+            VALUE "FileDescription",  "OMT Mini - Open Media Transport tray tools"
+            VALUE "FileVersion",      OMTMINI_VERSION_STR
+            VALUE "InternalName",     "OMTMini"
+            VALUE "OriginalFilename", "OMTMini.exe"
+            VALUE "ProductName",      "OMT Mini"
+            VALUE "ProductVersion",   OMTMINI_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

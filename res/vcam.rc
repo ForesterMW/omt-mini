@@ -1,0 +1,30 @@
+#include <windows.h>
+#include "omtmini_version.h"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     OMTMINI_VERSION_FIELD
+PRODUCTVERSION  OMTMINI_VERSION_FIELD
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_DLL
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "OMT Mini"
+            VALUE "FileDescription",  "OMT Mini Virtual Camera"
+            VALUE "FileVersion",      OMTMINI_VERSION_STR
+            VALUE "InternalName",     "omtmini_vcam"
+            VALUE "OriginalFilename", "omtmini_vcam.dll"
+            VALUE "ProductName",      "OMT Mini"
+            VALUE "ProductVersion",   OMTMINI_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
