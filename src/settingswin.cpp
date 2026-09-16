@@ -5,6 +5,7 @@
 #include "capture.h"
 #include "webcam.h"
 #include "omt.h"
+#include "update.h"
 
 #include <shellapi.h>
 #include <algorithm>
@@ -22,7 +23,7 @@ constexpr float kLabelW = 190.0f;
 
 const std::vector<std::wstring>& tab_labels() {
     static const std::vector<std::wstring> v = {
-        L"General", L"Network", L"Viewer", L"Desktop", L"Webcam", L"About"
+        L"General", L"Sources", L"Network", L"Viewer", L"Desktop", L"Webcam", L"About"
     };
     return v;
 }
@@ -99,7 +100,7 @@ void SettingsWindow::open_or_focus(int tab) {
         invalidate();
         return;
     }
-    if (!create(L"OMT Mini Settings", 620, 560, true)) return;
+    if (!create(L"OMT Mini Settings", 700, 580, true)) return;
     center_on_cursor();
     show();
 }
@@ -159,6 +160,121 @@ void SettingsWindow::tab_general(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     if (ctx.button(205, ui::rect(area.right - 120.0f, y, 120.0f, 28.0f),
                    L"Close all", ButtonStyle::Normal))
         App::instance().close_all_viewers();
+}
+
+// ---- Sources (hand added senders) --------------------------------------
+void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
+    Settings& cfg = settings();
+    float y = area.top + 4.0f;
+
+    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 52.0f),
+                     L"Sources on the local network are found automatically. Add a "
+                     L"sender here when discovery cannot reach it: a different "
+                     L"subnet, the far end of a VPN, or a host where mDNS is "
+                     L"blocked.",
+                     Font::Small, theme().text_dim);
+    y += 56.0f;
+
+    // ---- add row ----
+    ctx.text(ui::rect(area.left, y, 120.0f, 26.0f), L"Address", Font::Body, theme().text);
+    if (ctx.text_field(901, D2D1::RectF(area.left + 120.0f, y, area.left + 360.0f, y + 28.0f),
+                       &manual_address_text_, L"10.0.0.5  or  host:6400"))
+        manual_error_.clear();
+
+    ctx.text(ui::rect(area.left + 372.0f, y, 60.0f, 26.0f), L"Name", Font::Body,
+             theme().text_dim);
+    ctx.text_field(902, D2D1::RectF(area.left + 428.0f, y, area.right - 92.0f, y + 28.0f),
+                   &manual_name_text_, L"optional");
+
+    const bool can_add = !util::trim(util::narrow(manual_address_text_)).empty();
+    if (ctx.button(903, ui::rect(area.right - 82.0f, y, 82.0f, 28.0f), L"Add",
+                   ButtonStyle::Primary, can_add) ||
+        (can_add && ctx.input().key == VK_RETURN)) {
+        const std::string normalized =
+            omt::normalize_address(util::narrow(manual_address_text_));
+        if (normalized.empty()) {
+            manual_error_ = L"That address could not be understood.";
+        } else {
+            const bool exists = std::any_of(
+                cfg.manual_sources.begin(), cfg.manual_sources.end(),
+                [&](const ManualSource& m) { return m.address == normalized; });
+            if (exists) {
+                manual_error_ = L"That address is already in the list.";
+            } else {
+                ManualSource ms;
+                ms.address = normalized;
+                ms.name    = util::trim(util::narrow(manual_name_text_));
+                cfg.manual_sources.push_back(std::move(ms));
+                cfg.save();
+                discovery().set_manual_sources(cfg.manual_sources);
+                manual_address_text_.clear();
+                manual_name_text_.clear();
+                manual_error_.clear();
+            }
+        }
+        invalidate();
+    }
+    y += 32.0f;
+
+    if (!manual_error_.empty()) {
+        ctx.text(ui::rect(area.left + 120.0f, y, area.right - area.left - 120.0f, 18.0f),
+                 manual_error_, Font::Small, theme().danger, Align::Left, false);
+    } else {
+        ctx.text(ui::rect(area.left + 120.0f, y, area.right - area.left - 120.0f, 18.0f),
+                 L"Port 6400 is assumed when none is given.", Font::Small,
+                 theme().text_dim, Align::Left, false);
+    }
+    y += 26.0f;
+
+    ctx.separator(area.left, area.right, y);
+    y += 12.0f;
+
+    // ---- existing entries ----
+    if (cfg.manual_sources.empty()) {
+        ctx.text(D2D1::RectF(area.left, y + 20.0f, area.right, y + 44.0f),
+                 L"Nothing added yet", Font::Body, theme().text_dim, Align::Center);
+        return;
+    }
+
+    const float row_h = 44.0f;
+    const D2D1_RECT_F list = D2D1::RectF(area.left, y, area.right, area.bottom);
+    scroll_.content_height = cfg.manual_sources.size() * row_h + 6.0f;
+    ctx.begin_scroll(920, list, &scroll_);
+
+    int remove_index = -1;
+    float ry = list.top + 3.0f;
+    for (size_t i = 0; i < cfg.manual_sources.size(); ++i) {
+        const auto& m = cfg.manual_sources[i];
+        const D2D1_RECT_F rowr = D2D1::RectF(list.left, ry, list.right - 8.0f,
+                                             ry + row_h - 6.0f);
+        const auto id = static_cast<ui::Id>(930 + i * 2);
+
+        ctx.fill_rect(rowr, theme().panel, ui::metric::kRadius);
+
+        const std::wstring label = m.name.empty() ? util::widen(m.address)
+                                                  : util::widen(m.name);
+        ctx.text(ui::rect(rowr.left + 12.0f, rowr.top + 4.0f, 320.0f, 18.0f), label,
+                 Font::BodyBold, theme().text, Align::Left, false);
+        if (!m.name.empty()) {
+            ctx.text(ui::rect(rowr.left + 12.0f, rowr.top + 20.0f, 320.0f, 16.0f),
+                     util::widen(m.address), Font::Small, theme().text_dim,
+                     Align::Left, false);
+        }
+
+        if (ctx.button(id, ui::rect(rowr.right - 90.0f, rowr.top + 5.0f, 78.0f, 26.0f),
+                       L"Remove", ButtonStyle::Normal))
+            remove_index = static_cast<int>(i);
+
+        ry += row_h;
+    }
+    ctx.end_scroll();
+
+    if (remove_index >= 0) {
+        cfg.manual_sources.erase(cfg.manual_sources.begin() + remove_index);
+        cfg.save();
+        discovery().set_manual_sources(cfg.manual_sources);
+        invalidate();
+    }
 }
 
 // ---- Network -----------------------------------------------------------
@@ -467,25 +583,119 @@ void SettingsWindow::tab_webcam(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     }
 }
 
-// ---- About -------------------------------------------------------------
+// ---- About and updates -------------------------------------------------
 void SettingsWindow::tab_about(ui::Ctx& ctx, const D2D1_RECT_F& area) {
-    float y = area.top + 8.0f;
+    Settings& cfg = settings();
+    float y = area.top + 4.0f;
 
     ctx.text(ui::rect(area.left, y, 400.0f, 28.0f), L"OMT Mini", Font::Title, theme().text);
-    y += 30.0f;
+    y += 28.0f;
     ctx.text(ui::rect(area.left, y, 400.0f, 20.0f),
              L"Version " OMTMINI_VERSION_W, Font::Small, theme().text_dim);
-    y += 30.0f;
-
-    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 60.0f),
-                     L"A single tray application for Open Media Transport: discover "
-                     L"sources, open as many viewers as you like, share a screen, and "
-                     L"appear as a webcam in other apps.",
-                     Font::Body, theme().text_dim);
-    y += 68.0f;
+    y += 28.0f;
 
     ctx.separator(area.left, area.right, y);
-    y += 16.0f;
+    y += 14.0f;
+
+    // ---- updates ----
+    const UpdateInfo up = updater().info();
+    const bool working = up.state == UpdateState::Checking ||
+                         up.state == UpdateState::Downloading;
+
+    ctx.text(ui::rect(area.left, y, 300.0f, 20.0f), L"Updates", Font::BodyBold,
+             theme().text, Align::Left, false);
+
+    std::wstring status;
+    D2D1_COLOR_F status_colour = theme().text_dim;
+    switch (up.state) {
+        case UpdateState::Checking:
+            status = L"Checking GitHub...";
+            break;
+        case UpdateState::UpToDate:
+            status = L"This is the latest stable release.";
+            status_colour = theme().ok;
+            break;
+        case UpdateState::Available:
+            status = fmt(L"Version %S is available.", up.latest_version.c_str());
+            status_colour = theme().accent_hi;
+            break;
+        case UpdateState::Downloading:
+            status = fmt(L"Downloading, %d%%", up.progress_percent);
+            break;
+        case UpdateState::ReadyToInstall:
+            status = fmt(L"Version %S is ready to install.", up.latest_version.c_str());
+            status_colour = theme().ok;
+            break;
+        case UpdateState::Failed:
+            status = up.error.empty() ? L"The update check did not complete."
+                                      : util::widen(up.error);
+            status_colour = theme().warn;
+            break;
+        default:
+            status = L"Checks the public GitHub releases. No account needed.";
+            break;
+    }
+    ctx.text(ui::rect(area.left, y + 19.0f, area.right - area.left - 200.0f, 18.0f),
+             status, Font::Small, status_colour, Align::Left, false);
+
+    // The install step is always an explicit press. Nothing here restarts the
+    // application on its own.
+    if (up.state == UpdateState::ReadyToInstall) {
+        if (ctx.button(710, ui::rect(area.right - 190.0f, y - 2.0f, 190.0f, 30.0f),
+                       L"Install and restart", ButtonStyle::Primary)) {
+            App::instance().install_update();
+        }
+    } else if (up.state == UpdateState::Available) {
+        if (ctx.button(711, ui::rect(area.right - 190.0f, y - 2.0f, 190.0f, 30.0f),
+                       fmt(L"Update to %S", up.latest_version.c_str()),
+                       ButtonStyle::Primary)) {
+            updater().download_and_install(App::instance().message_window());
+        }
+    } else {
+        if (ctx.button(712, ui::rect(area.right - 190.0f, y - 2.0f, 190.0f, 30.0f),
+                       working ? L"Working..." : L"Check for updates",
+                       ButtonStyle::Normal, !working)) {
+            updater().check(App::instance().message_window(), false);
+        }
+    }
+    y += 44.0f;
+
+    if (up.state == UpdateState::Downloading) {
+        // Progress bar, so a slow connection does not look like a hang.
+        const D2D1_RECT_F track = D2D1::RectF(area.left, y, area.right, y + 6.0f);
+        ctx.fill_rect(track, theme().panel_hi, 3.0f);
+        const float w = (area.right - area.left) * (up.progress_percent / 100.0f);
+        ctx.fill_rect(D2D1::RectF(area.left, y, area.left + w, y + 6.0f),
+                      theme().accent, 3.0f);
+        y += 14.0f;
+        ctx.request_redraw();
+    }
+    if (up.state == UpdateState::Checking) ctx.request_redraw();
+
+    if ((up.state == UpdateState::Available || up.state == UpdateState::ReadyToInstall) &&
+        !up.release_url.empty()) {
+        if (ctx.button(713, ui::rect(area.left, y, 170.0f, 28.0f), L"Release notes",
+                       ButtonStyle::Ghost)) {
+            ShellExecuteW(nullptr, L"open", util::widen(up.release_url).c_str(),
+                          nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        y += 34.0f;
+    }
+
+    if (ctx.checkbox(714, ui::rect(area.left, y, 400.0f, 24.0f),
+                     &cfg.check_updates_on_launch,
+                     L"Check for updates when OMT Mini starts"))
+        dirty_ = true;
+    y += 30.0f;
+    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 34.0f),
+                     L"Checking only reads the public release list. Installing always "
+                     L"waits for you to press the button, so a machine on air is never "
+                     L"restarted on its own.",
+                     Font::Small, theme().text_dim);
+    y += 40.0f;
+
+    ctx.separator(area.left, area.right, y);
+    y += 14.0f;
 
     auto info = [&](const wchar_t* k, const std::wstring& v) {
         ctx.text(ui::rect(area.left, y, 150.0f, 20.0f), k, Font::Small, theme().text_dim);
@@ -496,24 +706,22 @@ void SettingsWindow::tab_about(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     info(L"libomt", omt::loaded() ? L"loaded" : L"not loaded");
     info(L"Renderer", gfx::Device::is_warp() ? L"Direct3D 11 (WARP software)"
                                              : L"Direct3D 11");
-    info(L"Settings", util::config_dir());
-    y += 12.0f;
+    y += 8.0f;
 
-    if (ctx.button(701, ui::rect(area.left, y, 160.0f, 32.0f), L"Open log folder",
+    if (ctx.button(701, ui::rect(area.left, y, 150.0f, 30.0f), L"Open log folder",
                    ButtonStyle::Normal))
         ShellExecuteW(nullptr, L"open", util::config_dir().c_str(), nullptr, nullptr,
                       SW_SHOWNORMAL);
 
-    if (ctx.button(702, ui::rect(area.left + 172.0f, y, 200.0f, 32.0f),
-                   L"Open Media Transport", ButtonStyle::Normal))
-        ShellExecuteW(nullptr, L"open", L"https://openmediatransport.org", nullptr,
-                      nullptr, SW_SHOWNORMAL);
-    y += 44.0f;
+    if (ctx.button(702, ui::rect(area.left + 162.0f, y, 150.0f, 30.0f), L"Project page",
+                   ButtonStyle::Normal))
+        ShellExecuteW(nullptr, L"open", L"https://github.com/ForesterMW/omt-mini",
+                      nullptr, nullptr, SW_SHOWNORMAL);
+    y += 38.0f;
 
-    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 60.0f),
-                     L"OMT Mini is not affiliated with vMix or the Open Media Transport "
-                     L"project. libomt and libvmx are MIT licensed and are redistributed "
-                     L"unmodified.",
+    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 40.0f),
+                     L"Not affiliated with vMix or the Open Media Transport project. "
+                     L"libomt and libvmx are MIT licensed and redistributed unmodified.",
                      Font::Small, theme().text_dim);
 }
 
@@ -530,10 +738,11 @@ void SettingsWindow::on_render(ui::Ctx& ctx) {
 
     switch (active_tab_) {
         case 0: tab_general(ctx, body); break;
-        case 1: tab_network(ctx, body); break;
-        case 2: tab_viewer(ctx, body);  break;
-        case 3: tab_desktop(ctx, body); break;
-        case 4: tab_webcam(ctx, body);  break;
+        case 1: tab_sources(ctx, body); break;
+        case 2: tab_network(ctx, body); break;
+        case 3: tab_viewer(ctx, body);  break;
+        case 4: tab_desktop(ctx, body); break;
+        case 5: tab_webcam(ctx, body);  break;
         default: tab_about(ctx, body);  break;
     }
 

@@ -139,9 +139,56 @@ std::string short_name(const std::string& address) {
 }
 
 std::string host_name(const std::string& address) {
+    if (is_url_address(address)) {
+        std::string rest = address.substr(6);
+        const size_t slash = rest.find('/');
+        if (slash != std::string::npos) rest = rest.substr(0, slash);
+        return rest;
+    }
     const size_t open = address.find(" (");
     if (open == std::string::npos) return {};
     return address.substr(0, open);
+}
+
+bool is_url_address(const std::string& address) {
+    return address.size() > 6 && util::iequals(address.substr(0, 6), "omt://");
+}
+
+std::string normalize_address(const std::string& input, int default_port) {
+    std::string s = util::trim(input);
+    if (s.empty()) return {};
+
+    // Strip a scheme if one was typed, then put the canonical one back.
+    if (s.size() > 6 && util::iequals(s.substr(0, 6), "omt://")) s = s.substr(6);
+    const size_t slash = s.find('/');
+    if (slash != std::string::npos) s = s.substr(0, slash);
+    s = util::trim(s);
+    if (s.empty()) return {};
+
+    // A bracketed IPv6 literal keeps its brackets; the port is what follows
+    // the closing one.
+    bool has_port = false;
+    if (s[0] == '[') {
+        const size_t close = s.find(']');
+        if (close == std::string::npos) return {};
+        has_port = (close + 1 < s.size() && s[close + 1] == ':');
+    } else {
+        const size_t colon = s.find(':');
+        // More than one colon means a bare IPv6 literal, which needs brackets
+        // before a port can be appended unambiguously.
+        if (colon != std::string::npos && s.find(':', colon + 1) != std::string::npos) {
+            s = "[" + s + "]";
+            has_port = false;
+        } else {
+            has_port = (colon != std::string::npos);
+        }
+    }
+
+    if (!has_port) {
+        s += ":";
+        s += std::to_string(default_port > 0 ? default_port : 6400);
+    }
+    return "omt://" + s;
 }
 
 // ---- Receiver ----------------------------------------------------------

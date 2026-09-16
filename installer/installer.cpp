@@ -251,11 +251,15 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
         return false;
     }
 
-    // Stop a running copy so its files can be replaced.
-    HWND running = FindWindowW(L"OMTMiniTray", nullptr);
-    if (running) {
-        SendMessageW(running, WM_CLOSE, 0, 0);
-        Sleep(600);
+    // Stop a running copy so its files can be replaced. An update installs
+    // over a copy that is shutting down threads, so wait for the window to go
+    // rather than guessing at a fixed delay.
+    set_status(L"Closing the running copy...");
+    if (HWND running = FindWindowW(L"OMTMiniTray", nullptr)) {
+        PostMessageW(running, WM_CLOSE, 0, 0);
+        for (int i = 0; i < 100 && FindWindowW(L"OMTMiniTray", nullptr); ++i)
+            Sleep(100);
+        Sleep(300);
     }
 
     if (g_progress) {

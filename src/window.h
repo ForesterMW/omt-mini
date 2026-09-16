@@ -15,6 +15,7 @@
 #define WM_OMT_SOURCES  (WM_APP + 12)
 #define WM_OMT_TRAY     (WM_APP + 13)
 #define WM_OMT_SHOWMAIN (WM_APP + 14)
+#define WM_OMT_UPDATE   (WM_APP + 15)
 
 class Window {
 public:

@@ -29,14 +29,22 @@ feeds at once as your machine will carry.
 - Frame and connection metadata, full screen, always on top
 
 **Desktop capture.** Publishes a monitor as an OMT source using DXGI Desktop
-Duplication, with optional mouse cursor and system audio via WASAPI loopback.
+Duplication, at 50 fps by default, with optional mouse cursor and system audio
+via WASAPI loopback.
 
 **Webcam output.** Receives an OMT source and presents it to other applications
 as a normal camera named "OMT Mini Virtual Camera", so you can put a network
 feed into Teams, Zoom, OBS or anything else that accepts a webcam.
 
-**Settings**, in tabs: General, Network, Viewer, Desktop, Webcam, About. The
-Network tab drives libomt's own discovery server address and sender port range.
+**Sources added by hand.** Senders that automatic discovery cannot see can be
+addressed directly, the same idea as Access Manager in NDI Tools.
+
+**One click updates.** Checks the public GitHub releases and installs the
+latest stable build without leaving the window.
+
+**Settings**, in tabs: General, Sources, Network, Viewer, Desktop, Webcam,
+About. The Network tab drives libomt's own discovery server address and sender
+port range.
 
 ## Install
 
@@ -63,8 +71,7 @@ Left click the tray icon for the source list. Right click it for a menu:
 sources, desktop capture, the webcam output and settings.
 
 Sources on the local network are discovered automatically over DNS-SD and
-appear within a second or two. If your sources are on another subnet, set a
-discovery server under Settings > Network.
+appear within a second or two.
 
 Keyboard shortcuts in a viewer window:
 
@@ -77,6 +84,43 @@ Keyboard shortcuts in a viewer window:
 | `D` | Metadata panel |
 | `T` | Always on top |
 | Double click | Full screen |
+
+### Adding a source by address
+
+Discovery only reaches the local network. When a sender is somewhere it cannot
+be seen, a different subnet, the far end of a VPN, or a host where mDNS is
+blocked, add it under **Settings > Sources**.
+
+Type an address and press Add:
+
+| You type | OMT Mini uses |
+|---|---|
+| `10.0.0.5` | `omt://10.0.0.5:6400` |
+| `10.0.0.5:6500` | `omt://10.0.0.5:6500` |
+| `studio-pc.local` | `omt://studio-pc.local:6400` |
+| `fe80::1` | `omt://[fe80::1]:6400` |
+
+Port 6400 is assumed when you do not give one. Entries appear in the source
+list and the tray menu beside discovered ones, and can be viewed or used as the
+webcam source in exactly the same way.
+
+Each entry points at one sender. To enumerate every source on a remote host
+instead, run an
+[OMT Discovery Server](https://github.com/openmediatransport/OMTDiscoveryServer)
+and set its address under Settings > Network.
+
+### Updates
+
+**Settings > About** shows the running version, checks GitHub for the latest
+stable release, and installs it in one press. The download is verified against
+the `SHA256SUMS` file published with the release before it is run, and a
+download that does not match is discarded.
+
+The repository is public, so no account, token or sign in is involved.
+
+Checking happens on launch by default and can be turned off. Installing is
+always a separate, explicit press: nothing here restarts the application on its
+own, which matters if the machine is on air.
 
 ### Firewall
 
@@ -146,6 +190,7 @@ and the two OMT DLLs.
 | `src/gfx.*` | One shared D3D11 device. Each window gets a flip model swap chain with a Direct2D context bound to the same back buffer, so video and interface composite without an intermediate copy. UYVY, UYVA and BGRA convert in a pixel shader |
 | `src/ui.*` | Immediate mode widgets drawn with Direct2D. Windows repaint on demand, so an idle window costs nothing |
 | `src/window.*` | Window base class, DPI handling, input translation |
+| `src/update.*` | Update check and install over WinHTTP, with SHA-256 verification through BCrypt |
 | `src/viewer.*` | A viewer window and its receiver thread |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |
 | `src/webcam.*` | Receiver writing into a shared memory ring that the filter reads |
@@ -166,6 +211,9 @@ and the two OMT DLLs.
   rendered, so they are not offered in the format list.
 - Desktop capture sends at the monitor's native resolution. There is no
   downscale option yet.
+- A hand added source addresses one sender directly. Listing everything on a
+  remote host needs a discovery server, because that is the only remote
+  enumeration libomt offers.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 

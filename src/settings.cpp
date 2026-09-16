@@ -100,6 +100,23 @@ void Settings::load() {
     webcam_fps              = clampi(get_int(kv, "webcam_fps", webcam_fps), 1, 120);
     webcam_autostart        = get_bool(kv, "webcam_autostart", webcam_autostart);
 
+    check_updates_on_launch = get_bool(kv, "check_updates_on_launch", check_updates_on_launch);
+
+    // Manual sources are stored as numbered keys so an address can contain
+    // any character without needing a separator convention.
+    manual_sources.clear();
+    for (int i = 0; i < 256; ++i) {
+        const std::string addr_key = "manual_source." + std::to_string(i);
+        auto it = kv.find(addr_key);
+        if (it == kv.end()) continue;
+        if (it->second.empty()) continue;
+        ManualSource ms;
+        ms.address = it->second;
+        auto name_it = kv.find("manual_name." + std::to_string(i));
+        if (name_it != kv.end()) ms.name = name_it->second;
+        manual_sources.push_back(std::move(ms));
+    }
+
     sources_x               = get_int(kv, "sources_x", sources_x);
     sources_y               = get_int(kv, "sources_y", sources_y);
 }
@@ -111,7 +128,7 @@ void Settings::save() const {
     auto puti = [&](const char* k, int v) {
         char b[64]; snprintf(b, sizeof(b), "%s=%d\r\n", k, v); out += b;
     };
-    auto puts_ = [&](const char* k, const std::string& v) {
+    auto puts_ = [&](const std::string& k, const std::string& v) {
         out += k; out += '='; out += v; out += "\r\n";
     };
 
@@ -153,6 +170,17 @@ void Settings::save() const {
     puti("webcam_height", webcam_height);
     puti("webcam_fps", webcam_fps);
     putb("webcam_autostart", webcam_autostart);
+
+    out += "\r\n# Updates\r\n";
+    putb("check_updates_on_launch", check_updates_on_launch);
+
+    out += "\r\n# Manually added sources\r\n";
+    for (size_t i = 0; i < manual_sources.size(); ++i) {
+        const std::string index = std::to_string(i);
+        puts_("manual_source." + index, manual_sources[i].address);
+        if (!manual_sources[i].name.empty())
+            puts_("manual_name." + index, manual_sources[i].name);
+    }
 
     out += "\r\n# Window placement\r\n";
     puti("sources_x", sources_x);

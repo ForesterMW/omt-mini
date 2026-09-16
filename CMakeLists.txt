@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(omt-mini CXX)
 
-set(OMTMINI_VERSION "0.1.0" CACHE STRING "Version stamped into the binaries")
+set(OMTMINI_VERSION "0.2.0" CACHE STRING "Version stamped into the binaries")
 string(REPLACE "." "," OMTMINI_VERSION_COMMA_BASE "${OMTMINI_VERSION}")
 set(OMTMINI_VERSION_COMMA "${OMTMINI_VERSION_COMMA_BASE},0")
 
@@ -71,6 +71,7 @@ set(OMTMINI_SOURCES
     src/audiomon.cpp
     src/audiocap.cpp
     src/uninstall.cpp
+    src/update.cpp
 )
 
 add_executable(OMTMini WIN32 ${OMTMINI_SOURCES} res/omtmini.rc)
@@ -80,6 +81,7 @@ target_link_libraries(OMTMini PRIVATE
     ole32 oleaut32 uuid
     shell32 shlwapi user32 gdi32 advapi32
     dwmapi winmm avrt
+    winhttp bcrypt
 )
 set_target_properties(OMTMini PROPERTIES OUTPUT_NAME "OMTMini")
 

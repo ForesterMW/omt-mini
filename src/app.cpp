@@ -5,6 +5,7 @@
 #include "capture.h"
 #include "webcam.h"
 #include "settings.h"
+#include "update.h"
 #include "omt.h"
 #include "gfx.h"
 
@@ -23,6 +24,7 @@ enum MenuId : UINT {
     kIdWebcam         = 3004,
     kIdCloseViewers   = 3005,
     kIdOpenLog        = 3006,
+    kIdUpdate         = 3007,
     kIdExit           = 3010,
 };
 
@@ -186,6 +188,13 @@ void App::show_tray_menu() {
 
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kIdSettings, L"Settings...");
+    if (updater().update_available()) {
+        const UpdateInfo up = updater().info();
+        wchar_t label[96];
+        _snwprintf(label, 96, L"Update to %hs...", up.latest_version.c_str());
+        label[95] = L'\0';
+        AppendMenuW(menu, MF_STRING, kIdUpdate, label);
+    }
     AppendMenuW(menu, MF_STRING, kIdOpenLog, L"Open log folder");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kIdExit, L"Exit OMT Mini");
@@ -264,7 +273,7 @@ bool App::toggle_webcam() {
         MessageBoxW(nullptr,
                     L"Choose a source for the webcam output in Settings first.",
                     L"OMT Mini", MB_OK | MB_ICONINFORMATION);
-        show_settings(4);
+        show_settings(5);
         return false;
     }
     if (!WebcamOutput::filter_registered()) {
@@ -281,6 +290,31 @@ bool App::toggle_webcam() {
         }
     }
     return webcam().start(source);
+}
+
+void App::install_update() {
+    const UpdateInfo up = updater().info();
+    if (up.state != UpdateState::ReadyToInstall || up.downloaded_path.empty()) return;
+
+    if (!viewers_.empty() || desktop_capture().running() || webcam().running()) {
+        const int answer = MessageBoxW(nullptr,
+            L"Installing will close the viewers and stop desktop capture and the "
+            L"webcam output.\n\nContinue?",
+            L"OMT Mini", MB_YESNO | MB_ICONQUESTION);
+        if (answer != IDYES) return;
+    }
+
+    util::logf("update: launching installer %s", util::narrow(up.downloaded_path).c_str());
+
+    // The installer closes this copy, replaces the files and starts it again.
+    const HINSTANCE result = ShellExecuteW(nullptr, L"open", up.downloaded_path.c_str(),
+                                           nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(result) <= 32) {
+        MessageBoxW(nullptr, L"The installer could not be started.", L"OMT Mini",
+                    MB_OK | MB_ICONERROR);
+        return;
+    }
+    quit();
 }
 
 LRESULT CALLBACK App::wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -324,6 +358,21 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             show_sources();
             return 0;
 
+        case WM_OMT_UPDATE: {
+            if (sources_window_) sources_window_->invalidate();
+            if (settings_window_) settings_window_->invalidate();
+            const UpdateInfo up = updater().info();
+            // Tell the user once that something is available. Downloading and
+            // installing still wait for a press.
+            if (up.state == UpdateState::Available && !update_announced_) {
+                update_announced_ = true;
+                notify(L"OMT Mini update available",
+                       util::widen("Version " + up.latest_version +
+                                   " is ready to download. Open Settings to install it."));
+            }
+            return 0;
+        }
+
         case WM_COMMAND: {
             const UINT id = LOWORD(wp);
             if (id >= kIdSourcesFirst && id <= kIdSourcesLast) {
@@ -337,6 +386,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 case kIdCloseViewers:   close_all_viewers(); return 0;
                 case kIdDesktopCapture: toggle_desktop_capture(); return 0;
                 case kIdWebcam:         toggle_webcam(); return 0;
+                case kIdUpdate:         show_settings(6); return 0;
                 case kIdOpenLog:
                     ShellExecuteW(nullptr, L"open", util::config_dir().c_str(),
                                   nullptr, nullptr, SW_SHOWNORMAL);
@@ -384,6 +434,7 @@ bool App::init(HINSTANCE instance) {
         return false;
     }
 
+    discovery().set_manual_sources(settings().manual_sources);
     discovery().start(hwnd_, WM_OMT_SOURCES);
     SetTimer(hwnd_, 99, 1000, nullptr);
 
@@ -392,6 +443,12 @@ bool App::init(HINSTANCE instance) {
     if (cfg.webcam_autostart && !cfg.webcam_source.empty() &&
         WebcamOutput::filter_registered())
         webcam().start(cfg.webcam_source);
+
+    if (settings().check_updates_on_launch) {
+        // Quiet: a machine with no route to GitHub should not open a dialog
+        // about it every time it starts.
+        updater().check(hwnd_, true);
+    }
 
     update_tray_tip();
     return true;
@@ -410,6 +467,8 @@ void App::quit() {
     webcam().stop();
     desktop_capture().stop();
     discovery().stop();
+    updater().cancel();
+    updater().join();
     remove_tray_icon();
 
     if (hwnd_) {

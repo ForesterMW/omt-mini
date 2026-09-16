@@ -11,12 +11,15 @@
 #include <thread>
 #include <atomic>
 
+struct ManualSource;
+
 struct DiscoveredSource {
     std::string address;    // "HOSTNAME (Source Name)" as advertised
     std::string name;       // display name
     std::string host;
     int64_t     first_seen_ms = 0;
     bool        is_local = false;   // advertised by this machine
+    bool        is_manual = false;  // added by hand, not discovered
 };
 
 class Discovery {
@@ -30,6 +33,10 @@ public:
     // Forces a poll on the next loop iteration instead of waiting the interval.
     void refresh_now();
 
+    // Hand entered senders, merged into the list alongside discovered ones.
+    // Call whenever the settings change.
+    void set_manual_sources(const std::vector<ManualSource>& manual);
+
 private:
     void run();
 
@@ -41,6 +48,9 @@ private:
     HWND                          window_ = nullptr;
     UINT                          message_ = 0;
     std::string                   local_host_;
+
+    mutable std::mutex            manual_mutex_;
+    std::vector<DiscoveredSource> manual_;
 };
 
 Discovery& discovery();

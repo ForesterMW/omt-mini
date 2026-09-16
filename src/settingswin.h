@@ -18,6 +18,7 @@ protected:
 
 private:
     void tab_general(ui::Ctx& ctx, const D2D1_RECT_F& area);
+    void tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void tab_network(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void tab_viewer(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void tab_desktop(ui::Ctx& ctx, const D2D1_RECT_F& area);
@@ -33,4 +34,9 @@ private:
     int64_t      status_until_ms_ = 0;
     std::vector<CaptureMonitor> monitors_;
     ui::ScrollState scroll_;
+
+    // Sources tab
+    std::wstring manual_address_text_;
+    std::wstring manual_name_text_;
+    std::wstring manual_error_;
 };

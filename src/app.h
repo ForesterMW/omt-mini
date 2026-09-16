@@ -26,6 +26,9 @@ public:
     void show_settings(int tab = 0);
     bool toggle_desktop_capture();
     bool toggle_webcam();
+    // Runs the downloaded installer and exits. Only reached from a button
+    // press; nothing in OMT Mini installs an update by itself.
+    void install_update();
     void notify(const std::wstring& title, const std::wstring& message);
 
     size_t viewer_count() const { return viewers_.size(); }
@@ -58,4 +61,5 @@ private:
     std::unique_ptr<SourcesWindow>  sources_window_;
     std::unique_ptr<SettingsWindow> settings_window_;
     std::vector<std::string>        menu_sources_;
+    bool                            update_announced_ = false;
 };

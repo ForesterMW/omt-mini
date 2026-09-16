@@ -4,10 +4,17 @@
 // nesting in this config worth a JSON dependency.
 #pragma once
 #include <string>
+#include <vector>
 
 extern "C" {
 #include "libomt.h"
 }
+
+// One hand entered sender.
+struct ManualSource {
+    std::string address;   // omt://host:port
+    std::string name;      // optional label, falls back to the address
+};
 
 struct Settings {
     // ---- General ----
@@ -35,7 +42,7 @@ struct Settings {
     // ---- Desktop capture ----
     std::string capture_name      = "Desktop";
     int         capture_monitor   = 0;        // index into enumerated outputs
-    int         capture_fps       = 30;
+    int         capture_fps       = 50;
     int         capture_quality   = OMTQuality_Default;
     bool        capture_cursor    = true;
     bool        capture_audio     = true;     // WASAPI loopback of default device
@@ -47,6 +54,17 @@ struct Settings {
     int         webcam_height     = 720;
     int         webcam_fps        = 30;
     bool        webcam_autostart  = false;
+
+    // ---- Manually added sources ----
+    // Senders that discovery cannot see: a different subnet, a VPN, or a host
+    // with mDNS blocked. Addressed directly as omt://host:port, which is what
+    // libomt accepts in place of a discovered name.
+    std::vector<ManualSource> manual_sources;
+
+    // ---- Updates ----
+    // Checking is a read only call to the public GitHub API. Installing is
+    // never automatic and always needs an explicit press.
+    bool        check_updates_on_launch = true;
 
     // ---- Window placement (remembered, not user facing) ----
     int         sources_x = -1, sources_y = -1;

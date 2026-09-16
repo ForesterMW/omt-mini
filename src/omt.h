@@ -100,6 +100,12 @@ const char* quality_name(OMTQuality q);
 // "HOSTNAME (Source Name)" -> "Source Name", for compact display.
 std::string short_name(const std::string& address);
 std::string host_name(const std::string& address);
+// True for a direct omt://host:port address rather than a discovered name.
+bool is_url_address(const std::string& address);
+// Turns what someone typed into an address libomt accepts. Accepts
+// "10.0.0.5", "10.0.0.5:6400", "host.local", "omt://host:6400" and IPv6 in
+// brackets. Returns an empty string if it cannot be made sense of.
+std::string normalize_address(const std::string& input, int default_port = 6400);
 
 // ---- RAII wrappers -----------------------------------------------------
 class Receiver {

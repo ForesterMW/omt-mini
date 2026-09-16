@@ -4,6 +4,7 @@
 #include "webcam.h"
 #include "settings.h"
 #include "omt.h"
+#include "update.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -83,6 +84,20 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
     if (ctx.button(11, ui::rect(ctx.width() - 112.0f, 16.0f, 92.0f, 28.0f), L"Settings",
                    ButtonStyle::Normal))
         App::instance().show_settings(0);
+
+    // A quiet indicator rather than a dialog. Pressing it opens the About tab,
+    // where the install button lives.
+    if (updater().update_available()) {
+        const UpdateInfo up = updater().info();
+        const std::wstring label =
+            up.state == UpdateState::ReadyToInstall
+                ? std::wstring(L"Install update")
+                : fmt(L"Update to %S", up.latest_version.c_str());
+        const float w = ctx.text_width(label, Font::Small) + 26.0f;
+        if (ctx.button(12, ui::rect(ctx.width() - 124.0f - w, 16.0f, w, 28.0f), label,
+                       ButtonStyle::Primary))
+            App::instance().show_settings(6);
+    }
 }
 
 void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
@@ -92,7 +107,8 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         ctx.text(D2D1::RectF(area.left + 40.0f, area.top + 88.0f,
                              area.right - 40.0f, area.top + 150.0f),
                  L"Start an OMT sender on this machine or another one on the same "
-                 L"network. Sources appear here automatically.",
+                 L"network. Sources appear here automatically. If one cannot be "
+                 L"discovered, add it by address under Settings > Sources.",
                  Font::Small, theme().text_dim, Align::Center);
         return;
     }
@@ -128,7 +144,8 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                  util::widen(s.name), Font::BodyBold, theme().text, Align::Left, false);
 
         std::wstring sub = util::widen(s.host);
-        if (s.is_local) sub += L"   this machine";
+        if (s.is_manual)     sub = util::widen(s.address) + L"   added by hand";
+        else if (s.is_local) sub += L"   this machine";
         ctx.text(ui::rect(rowr.left + 14.0f, rowr.top + 28.0f, 300.0f, 18.0f),
                  sub, Font::Small, theme().text_dim, Align::Left, false);
 

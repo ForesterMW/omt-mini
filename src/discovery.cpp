@@ -1,5 +1,6 @@
 #include "discovery.h"
 #include "omt.h"
+#include "settings.h"
 
 #include <algorithm>
 
@@ -34,6 +35,31 @@ void Discovery::stop() {
 
 void Discovery::refresh_now() { wake_ = true; }
 
+void Discovery::set_manual_sources(const std::vector<ManualSource>& manual) {
+    std::vector<DiscoveredSource> next;
+    next.reserve(manual.size());
+    const int64_t now = util::now_ms();
+
+    for (const auto& m : manual) {
+        if (m.address.empty()) continue;
+        DiscoveredSource s;
+        s.address       = m.address;
+        s.host          = omt::host_name(m.address);
+        s.name          = m.name.empty() ? s.host : m.name;
+        s.is_manual     = true;
+        s.first_seen_ms = now;
+        next.push_back(std::move(s));
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(manual_mutex_);
+        manual_.swap(next);
+    }
+    // Republish straight away rather than waiting for the next poll.
+    wake_ = true;
+    if (window_) PostMessageW(window_, message_, 0, 0);
+}
+
 std::vector<DiscoveredSource> Discovery::sources() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return sources_;
@@ -48,6 +74,7 @@ void Discovery::run() {
     util::logf("discovery: thread started");
 
     std::vector<std::string> previous;
+    std::vector<std::string> last_manual;
     while (running_) {
         std::vector<std::string> current;
 
@@ -64,7 +91,17 @@ void Discovery::run() {
         std::sort(current.begin(), current.end());
         current.erase(std::unique(current.begin(), current.end()), current.end());
 
-        if (current != previous) {
+        bool manual_changed = false;
+        {
+            std::lock_guard<std::mutex> lock(manual_mutex_);
+            std::vector<std::string> manual_now;
+            manual_now.reserve(manual_.size());
+            for (const auto& m : manual_) manual_now.push_back(m.address);
+            manual_changed = (manual_now != last_manual);
+            if (manual_changed) last_manual.swap(manual_now);
+        }
+
+        if (current != previous || manual_changed) {
             const int64_t now = util::now_ms();
             std::vector<DiscoveredSource> next;
             next.reserve(current.size());
@@ -86,13 +123,30 @@ void Discovery::run() {
                 next.push_back(std::move(s));
             }
 
+            // Manual entries sit alongside the discovered ones. A hand added
+            // address that the network also advertises is dropped here so it
+            // does not appear twice.
+            {
+                std::lock_guard<std::mutex> lock(manual_mutex_);
+                for (const auto& m : manual_) {
+                    const bool duplicate = std::any_of(
+                        next.begin(), next.end(),
+                        [&](const DiscoveredSource& o) { return o.address == m.address; });
+                    if (!duplicate) next.push_back(m);
+                }
+            }
+
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 sources_.swap(next);
             }
-            util::logf("discovery: %zu source(s)", current.size());
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                util::logf("discovery: %zu source(s) (%zu discovered)",
+                           sources_.size(), current.size());
+            }
             if (window_) PostMessageW(window_, message_, 0, 0);
-            previous.swap(current);
+            previous = std::move(current);
         }
 
         // Poll about once a second, but break out early when asked to.
