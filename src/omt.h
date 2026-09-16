@@ -106,6 +106,9 @@ bool is_url_address(const std::string& address);
 // "10.0.0.5", "10.0.0.5:6400", "host.local", "omt://host:6400" and IPv6 in
 // brackets. Returns an empty string if it cannot be made sense of.
 std::string normalize_address(const std::string& input, int default_port = 6400);
+// Splits omt://host:port into its parts. IPv6 literals come back without their
+// brackets, which is what getaddrinfo wants. False if it is not a URL address.
+bool split_address(const std::string& address, std::string* host, std::string* port);
 
 // ---- RAII wrappers -----------------------------------------------------
 class Receiver {

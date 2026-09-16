@@ -106,6 +106,12 @@ public:
     // Consumes ids id+1 through id+labels.size() for the individual tabs, so
     // callers must leave that range free.
     bool tabs(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>& labels, int* active);
+    // A small tinted label, for example "this machine" or "direct". Returns
+    // the width it occupied so the caller can lay out what follows it.
+    float badge(float x, float y, float height, const std::wstring& label,
+                const D2D1_COLOR_F& colour);
+    // A small filled dot, for online and offline indication.
+    void status_dot(float cx, float cy, float radius, const D2D1_COLOR_F& colour);
     void section_label(const D2D1_RECT_F& r, const std::wstring& label);
     void separator(float x0, float x1, float y);
 

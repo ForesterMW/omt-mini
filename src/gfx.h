@@ -40,6 +40,7 @@ struct Theme {
     D2D1_COLOR_F warn;
     D2D1_COLOR_F tally_pgm;
     D2D1_COLOR_F tally_pvw;
+    D2D1_COLOR_F badge_direct;
 };
 const Theme& theme();
 

@@ -81,7 +81,7 @@ target_link_libraries(OMTMini PRIVATE
     ole32 oleaut32 uuid
     shell32 shlwapi user32 gdi32 advapi32
     dwmapi winmm avrt
-    winhttp bcrypt
+    winhttp bcrypt ws2_32
 )
 set_target_properties(OMTMini PROPERTIES OUTPUT_NAME "OMTMini")
 

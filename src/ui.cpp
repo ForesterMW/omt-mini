@@ -625,6 +625,38 @@ bool Ctx::tabs(Id id, const D2D1_RECT_F& r, const std::vector<std::wstring>& lab
     return changed;
 }
 
+float Ctx::badge(float x, float y, float height, const std::wstring& label,
+                 const D2D1_COLOR_F& colour) {
+    if (label.empty()) return 0.0f;
+
+    const float pad = 7.0f;
+    const float w = text_width(label, Font::Small) + pad * 2.0f;
+    const D2D1_RECT_F r = D2D1::RectF(x, y, x + w, y + height);
+
+    D2D1_COLOR_F fill = colour;
+    fill.a = 0.16f;
+    fill_rect(r, fill, height * 0.5f);
+
+    D2D1_COLOR_F edge = colour;
+    edge.a = 0.40f;
+    stroke_rect(r, edge, 1.0f, height * 0.5f);
+
+    text(r, label, Font::Small, colour, Align::Center);
+    return w;
+}
+
+void Ctx::status_dot(float cx, float cy, float radius, const D2D1_COLOR_F& colour) {
+    if (!dc_) return;
+    // A dimmer halo so the dot reads at a glance without being a hard pixel.
+    D2D1_COLOR_F halo = colour;
+    halo.a = 0.22f;
+    D2D1_ELLIPSE outer{ D2D1::Point2F(cx, cy), radius * 2.1f, radius * 2.1f };
+    dc_->FillEllipse(&outer, brush(halo));
+
+    D2D1_ELLIPSE dot{ D2D1::Point2F(cx, cy), radius, radius };
+    dc_->FillEllipse(&dot, brush(colour));
+}
+
 void Ctx::section_label(const D2D1_RECT_F& r, const std::wstring& label) {
     text(r, label, Font::BodyBold, theme().text_dim);
 }

@@ -6,6 +6,7 @@
 #include "webcam.h"
 #include "omt.h"
 #include "update.h"
+#include "discovery.h"
 
 #include <shellapi.h>
 #include <algorithm>
@@ -236,6 +237,8 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         return;
     }
 
+    const auto live_sources = discovery().sources();
+
     const float row_h = 44.0f;
     const D2D1_RECT_F list = D2D1::RectF(area.left, y, area.right, area.bottom);
     scroll_.content_height = cfg.manual_sources.size() * row_h + 6.0f;
@@ -251,15 +254,28 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
 
         ctx.fill_rect(rowr, theme().panel, ui::metric::kRadius);
 
+        // Same reachability the source list shows, so this page does not have
+        // to be cross referenced with that one.
+        SourceStatus status = SourceStatus::Unknown;
+        for (const auto& live : live_sources) {
+            if (live.address == m.address) { status = live.status; break; }
+        }
+        const D2D1_COLOR_F dot = status == SourceStatus::Online  ? theme().ok
+                               : status == SourceStatus::Offline ? theme().danger
+                                                                 : theme().text_dim;
+        ctx.status_dot(rowr.left + 16.0f, rowr.top + 12.0f, 3.5f, dot);
+
+        const float text_left = rowr.left + 30.0f;
         const std::wstring label = m.name.empty() ? util::widen(m.address)
                                                   : util::widen(m.name);
-        ctx.text(ui::rect(rowr.left + 12.0f, rowr.top + 4.0f, 320.0f, 18.0f), label,
+        ctx.text(ui::rect(text_left, rowr.top + 4.0f, 300.0f, 18.0f), label,
                  Font::BodyBold, theme().text, Align::Left, false);
-        if (!m.name.empty()) {
-            ctx.text(ui::rect(rowr.left + 12.0f, rowr.top + 20.0f, 320.0f, 16.0f),
-                     util::widen(m.address), Font::Small, theme().text_dim,
-                     Align::Left, false);
-        }
+
+        std::wstring detail = m.name.empty() ? std::wstring() : util::widen(m.address);
+        if (status == SourceStatus::Offline)
+            detail += detail.empty() ? L"not answering" : L"   not answering";
+        ctx.text(ui::rect(text_left, rowr.top + 20.0f, 300.0f, 16.0f),
+                 detail, Font::Small, theme().text_dim, Align::Left, false);
 
         if (ctx.button(id, ui::rect(rowr.right - 90.0f, rowr.top + 5.0f, 78.0f, 26.0f),
                        L"Remove", ButtonStyle::Normal))

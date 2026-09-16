@@ -154,6 +154,38 @@ bool is_url_address(const std::string& address) {
     return address.size() > 6 && util::iequals(address.substr(0, 6), "omt://");
 }
 
+bool split_address(const std::string& address, std::string* host, std::string* port) {
+    if (!is_url_address(address)) return false;
+
+    std::string rest = address.substr(6);
+    const size_t slash = rest.find('/');
+    if (slash != std::string::npos) rest = rest.substr(0, slash);
+    if (rest.empty()) return false;
+
+    std::string h, p;
+    if (rest[0] == '[') {
+        const size_t close = rest.find(']');
+        if (close == std::string::npos) return false;
+        h = rest.substr(1, close - 1);
+        if (close + 1 < rest.size() && rest[close + 1] == ':')
+            p = rest.substr(close + 2);
+    } else {
+        const size_t colon = rest.rfind(':');
+        if (colon == std::string::npos) {
+            h = rest;
+        } else {
+            h = rest.substr(0, colon);
+            p = rest.substr(colon + 1);
+        }
+    }
+
+    if (h.empty()) return false;
+    if (p.empty()) p = "6400";
+    if (host) *host = h;
+    if (port) *port = p;
+    return true;
+}
+
 std::string normalize_address(const std::string& input, int default_port) {
     std::string s = util::trim(input);
     if (s.empty()) return {};

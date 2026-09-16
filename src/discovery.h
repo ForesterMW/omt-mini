@@ -13,6 +13,11 @@
 
 struct ManualSource;
 
+// Manual sources can be saved and then go away, so they carry a reachability
+// state. Anything discovered over DNS-SD is online by definition: it would not
+// be advertised otherwise.
+enum class SourceStatus { Unknown, Online, Offline };
+
 struct DiscoveredSource {
     std::string address;    // "HOSTNAME (Source Name)" as advertised
     std::string name;       // display name
@@ -20,6 +25,7 @@ struct DiscoveredSource {
     int64_t     first_seen_ms = 0;
     bool        is_local = false;   // advertised by this machine
     bool        is_manual = false;  // added by hand, not discovered
+    SourceStatus status = SourceStatus::Online;
 };
 
 class Discovery {
@@ -49,8 +55,13 @@ private:
     UINT                          message_ = 0;
     std::string                   local_host_;
 
+    void probe_run();
+
     mutable std::mutex            manual_mutex_;
     std::vector<DiscoveredSource> manual_;
+    std::thread                   probe_thread_;
+    std::atomic<bool>             status_changed_{false};
+    std::atomic<bool>             probe_now_{false};
 };
 
 Discovery& discovery();

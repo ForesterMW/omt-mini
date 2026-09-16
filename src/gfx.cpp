@@ -250,6 +250,7 @@ const Theme& theme() {
         v.warn      = rgb(0xF59E0B);
         v.tally_pgm = rgb(0xEF4444);
         v.tally_pvw = rgb(0x22C55E);
+        v.badge_direct = rgb(0xA78BFA);
         return v;
     }();
     return t;

@@ -140,18 +140,42 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
             ctx.stroke_rect(rowr, edge, 1.0f, ui::metric::kRadius);
         }
 
-        ctx.text(ui::rect(rowr.left + 14.0f, rowr.top + 8.0f, 300.0f, 20.0f),
-                 util::widen(s.name), Font::BodyBold, theme().text, Align::Left, false);
+        // Status dot. Discovered sources are online by definition, so this only
+        // ever says anything interesting for one added by hand.
+        D2D1_COLOR_F dot = theme().ok;
+        if (s.is_manual) {
+            dot = s.status == SourceStatus::Online  ? theme().ok
+                : s.status == SourceStatus::Offline ? theme().danger
+                                                    : theme().text_dim;
+        }
+        ctx.status_dot(rowr.left + 18.0f, rowr.top + 16.0f, 3.5f, dot);
 
-        std::wstring sub = util::widen(s.host);
-        if (s.is_manual)     sub = util::widen(s.address) + L"   added by hand";
-        else if (s.is_local) sub += L"   this machine";
-        ctx.text(ui::rect(rowr.left + 14.0f, rowr.top + 28.0f, 300.0f, 18.0f),
+        const float text_left = rowr.left + 32.0f;
+        const std::wstring name = util::widen(s.name);
+        ctx.text(ui::rect(text_left, rowr.top + 8.0f, 260.0f, 20.0f),
+                 name, Font::BodyBold, theme().text, Align::Left, false);
+
+        // Tag sits immediately after the name, clear of the hover actions.
+        const float name_end = text_left + std::min(260.0f,
+                                                    ctx.text_width(name, Font::BodyBold));
+        if (s.is_manual) {
+            ctx.badge(name_end + 10.0f, rowr.top + 9.0f, 17.0f, L"direct",
+                      theme().badge_direct);
+        } else if (s.is_local) {
+            ctx.badge(name_end + 10.0f, rowr.top + 9.0f, 17.0f, L"this machine",
+                      theme().accent_hi);
+        }
+
+        std::wstring sub = s.is_manual ? util::widen(s.address) : util::widen(s.host);
+        if (s.is_manual && s.status == SourceStatus::Offline) sub += L"   not answering";
+        ctx.text(ui::rect(text_left, rowr.top + 28.0f, 320.0f, 18.0f),
                  sub, Font::Small, theme().text_dim, Align::Left, false);
 
         // Actions appear on hover to keep the list calm at rest.
         if (over || t > 0.3f) {
             const float bw = 76.0f;
+            // Still openable when offline: a viewer shows "connecting" and
+            // picks the source up the moment it comes back.
             if (ctx.button(id + 1,
                            ui::rect(rowr.right - bw - 12.0f, rowr.top + 13.0f, bw, 26.0f),
                            L"View", ButtonStyle::Primary)) {

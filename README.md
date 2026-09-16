@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 653 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 745 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -39,8 +39,14 @@ via WASAPI loopback.
 as a normal camera named "OMT Mini Virtual Camera", so you can put a network
 feed into Teams, Zoom, OBS or anything else that accepts a webcam.
 
+**The source list** tags what it finds. Anything advertised by the machine you
+are sitting at is marked `this machine`, so it is obvious at a glance which
+feeds are not crossing the network.
+
 **Sources added by hand.** Senders that automatic discovery cannot see can be
-addressed directly, the same idea as Access Manager in NDI Tools.
+addressed directly, the same idea as Access Manager in NDI Tools. They are
+tagged `direct` and carry a green or red dot, because something added by hand
+can be saved and then be switched off.
 
 **One click updates.** Checks the public GitHub releases and installs the
 latest stable build without leaving the window.
@@ -106,6 +112,13 @@ Type an address and press Add:
 Port 6400 is assumed when you do not give one. Entries appear in the source
 list and the tray menu beside discovered ones, and can be viewed or used as the
 webcam source in exactly the same way.
+
+They are tagged `direct` and carry a status dot, checked every eight seconds
+with a plain TCP connect, which costs far less than standing up a receiver to
+find out. Green means the sender answered, red means it did not, grey means it
+has not been checked yet. A red one can still be opened: the viewer sits at
+"connecting" and picks the source up the moment it comes back. Discovered
+sources are always green, since they would not be advertised otherwise.
 
 Each entry points at one sender. To enumerate every source on a remote host
 instead, run an
@@ -183,7 +196,7 @@ follow what they do by hand.
 
 ## How it is put together
 
-About 8,700 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
+About 10,300 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
 framework or package manager. The only runtime dependencies are Windows itself
 and the two OMT DLLs.
 
@@ -194,6 +207,8 @@ and the two OMT DLLs.
 | `src/ui.*` | Immediate mode widgets drawn with Direct2D. Windows repaint on demand, so an idle window costs nothing |
 | `src/window.*` | Window base class, DPI handling, input translation |
 | `src/update.*` | Update check and install over WinHTTP, with SHA-256 verification through BCrypt |
+| `src/discovery.*` | DNS-SD polling, hand added senders, and the reachability probe |
+| `src/instance.h` | Finding and shutting down a running copy, shared with the installer |
 | `src/viewer.*` | A viewer window and its receiver thread |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |
 | `src/webcam.*` | Receiver writing into a shared memory ring that the filter reads |
@@ -217,6 +232,8 @@ and the two OMT DLLs.
 - A hand added source addresses one sender directly. Listing everything on a
   remote host needs a discovery server, because that is the only remote
   enumeration libomt offers.
+- The reachability dot means a TCP connection was accepted on that port. It
+  does not prove the thing listening is an OMT sender.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 
