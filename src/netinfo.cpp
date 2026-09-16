@@ -103,6 +103,47 @@ std::string resolve(const std::string& host) {
     return text;
 }
 
+bool port_open(const std::string& host, const std::string& port, int timeout_ms) {
+    if (!g_ready && !init()) return false;
+
+    addrinfo hints{};
+    hints.ai_family   = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    addrinfo* resolved = nullptr;
+    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &resolved) != 0 || !resolved)
+        return false;
+
+    bool reachable = false;
+    for (addrinfo* ai = resolved; ai && !reachable; ai = ai->ai_next) {
+        SOCKET sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (sock == INVALID_SOCKET) continue;
+
+        u_long nonblocking = 1;
+        ioctlsocket(sock, FIONBIO, &nonblocking);
+
+        if (connect(sock, ai->ai_addr, static_cast<int>(ai->ai_addrlen)) == 0) {
+            reachable = true;
+        } else if (WSAGetLastError() == WSAEWOULDBLOCK) {
+            fd_set writable, failed;
+            FD_ZERO(&writable); FD_SET(sock, &writable);
+            FD_ZERO(&failed);   FD_SET(sock, &failed);
+            timeval tv{ timeout_ms / 1000, (timeout_ms % 1000) * 1000 };
+            if (select(0, nullptr, &writable, &failed, &tv) > 0 && FD_ISSET(sock, &writable)) {
+                int error = 0;
+                int len = sizeof(error);
+                if (getsockopt(sock, SOL_SOCKET, SO_ERROR,
+                               reinterpret_cast<char*>(&error), &len) == 0 && error == 0)
+                    reachable = true;
+            }
+        }
+        closesocket(sock);
+    }
+    freeaddrinfo(resolved);
+    return reachable;
+}
+
 std::vector<int> listening_ports(int low, int high) {
     std::vector<int> ports;
     if (!g_ready && !init()) return ports;

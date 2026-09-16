@@ -66,6 +66,9 @@ public:
     // True while a popup (dropdown list) is capturing input.
     bool popup_open() const { return open_dropdown_ != kNoId; }
     void close_popup() { open_dropdown_ = kNoId; }
+    // Opens a dropdown without the user having clicked its anchor, for a list
+    // that is summoned by something else.
+    void open_popup(Id id) { open_dropdown_ = id; }
 
     // ---- primitives ----
     void fill_rect(const D2D1_RECT_F& r, const D2D1_COLOR_F& c, float radius = 0.0f);

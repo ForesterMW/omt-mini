@@ -12,49 +12,6 @@
 namespace {
 Discovery g_discovery;
 
-// A plain TCP connect is enough to tell whether a sender is there, and costs
-// far less than standing up a receiver just to find out.
-bool tcp_probe(const std::string& host, const std::string& port, int timeout_ms) {
-    addrinfo hints{};
-    hints.ai_family   = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    addrinfo* resolved = nullptr;
-    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &resolved) != 0 || !resolved)
-        return false;
-
-    bool reachable = false;
-    for (addrinfo* ai = resolved; ai && !reachable; ai = ai->ai_next) {
-        SOCKET sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-        if (sock == INVALID_SOCKET) continue;
-
-        // Non blocking so an unreachable host cannot park this thread on the
-        // system's own connect timeout, which can be tens of seconds.
-        u_long nonblocking = 1;
-        ioctlsocket(sock, FIONBIO, &nonblocking);
-
-        if (connect(sock, ai->ai_addr, static_cast<int>(ai->ai_addrlen)) == 0) {
-            reachable = true;
-        } else if (WSAGetLastError() == WSAEWOULDBLOCK) {
-            fd_set writable, failed;
-            FD_ZERO(&writable); FD_SET(sock, &writable);
-            FD_ZERO(&failed);   FD_SET(sock, &failed);
-            timeval tv{ timeout_ms / 1000, (timeout_ms % 1000) * 1000 };
-            if (select(0, nullptr, &writable, &failed, &tv) > 0 && FD_ISSET(sock, &writable)) {
-                int error = 0;
-                int len = sizeof(error);
-                if (getsockopt(sock, SOL_SOCKET, SO_ERROR,
-                               reinterpret_cast<char*>(&error), &len) == 0 && error == 0)
-                    reachable = true;
-            }
-        }
-        closesocket(sock);
-    }
-    freeaddrinfo(resolved);
-    return reachable;
-}
-
 // Reads the product name a sender reports about itself.
 //
 // OMT already carries this: a sender fills in OMTSenderInfo and any receiver
@@ -241,7 +198,7 @@ void Discovery::probe_run() {
             std::string host, port;
             if (!omt::split_address(target.address, &host, &port)) continue;
 
-            const SourceStatus status = tcp_probe(host, port, kTimeoutMs)
+            const SourceStatus status = netinfo::port_open(host, port, kTimeoutMs)
                                       ? SourceStatus::Online
                                       : SourceStatus::Offline;
 

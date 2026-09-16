@@ -1,6 +1,7 @@
 #include "app.h"
 #include "sourceswin.h"
 #include "settingswin.h"
+#include "multiview.h"
 #include "discovery.h"
 #include "capture.h"
 #include "webcam.h"
@@ -25,6 +26,7 @@ enum MenuId : UINT {
     kIdCloseViewers   = 3005,
     kIdOpenLog        = 3006,
     kIdUpdate         = 3007,
+    kIdMultiview      = 3008,
     kIdExit           = 3010,
 };
 
@@ -174,6 +176,7 @@ void App::show_tray_menu() {
 
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kIdShowSources, L"Sources...");
+    AppendMenuW(menu, MF_STRING, kIdMultiview, L"Multiview");
     if (!viewers_.empty()) {
         wchar_t label[64];
         _snwprintf(label, 64, L"Close all viewers (%zu)", viewers_.size());
@@ -241,6 +244,12 @@ void App::close_all_viewers() {
 void App::show_sources() {
     if (!sources_window_) sources_window_ = std::make_unique<SourcesWindow>();
     sources_window_->open_or_focus();
+}
+
+void App::show_multiview() {
+    if (multiview_window_ && multiview_window_->closed()) multiview_window_.reset();
+    if (!multiview_window_) multiview_window_ = std::make_unique<MultiviewWindow>();
+    multiview_window_->open_or_focus();
 }
 
 void App::show_settings(int tab) {
@@ -400,6 +409,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             }
             switch (id) {
                 case kIdShowSources:    show_sources(); return 0;
+                case kIdMultiview:      show_multiview(); return 0;
                 case kIdSettings:       show_settings(0); return 0;
                 case kIdCloseViewers:   close_all_viewers(); return 0;
                 case kIdDesktopCapture: toggle_desktop_capture(); return 0;
@@ -462,6 +472,8 @@ bool App::init(HINSTANCE instance) {
         WebcamOutput::filter_registered())
         webcam().start(cfg.webcam_source);
 
+    if (cfg.multiview_autostart) show_multiview();
+
     if (settings().check_updates_on_launch) {
         // Quiet: a machine with no route to GitHub should not open a dialog
         // about it every time it starts.
@@ -479,6 +491,7 @@ void App::quit() {
     util::logf("app: shutting down");
     close_all_viewers();
     viewers_.clear();
+    multiview_window_.reset();
     sources_window_.reset();
     settings_window_.reset();
 

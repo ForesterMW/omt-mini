@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 798 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 851 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -34,6 +34,15 @@ feeds at once as your machine will carry.
 **Desktop capture.** Publishes a monitor as an OMT source using DXGI Desktop
 Duplication, at 50 fps by default, with optional mouse cursor and system audio
 via WASAPI loopback.
+
+**Multiview.** One window showing many sources at once, in `2x2`, `3x2`, `3x3`,
+`4x3`, `4x4`, or the classic hero shapes `1 + 5` and `1 + 7`. Tally borders the
+whole cell. Full screen on `F11` or a double click, and it can open with OMT
+Mini and go straight to full screen.
+
+Tiles receive in OMT's **preview mode** by default, which is the sender's own
+one eighth resolution stream, so sixteen tiles cost a fraction of sixteen full
+feeds. Switch to full feeds from the toolbar if you need to see detail.
 
 **Webcam output.** Receives an OMT source and presents it to other applications
 as a normal camera named "OMT Mini Virtual Camera", so you can put a network
@@ -97,6 +106,9 @@ Keyboard shortcuts in a viewer window:
 | `T` | Always on top |
 | Double click | Full screen |
 
+The multiview window takes `F`, `F11`, `Esc` and double click for full screen
+too. Click any cell to choose what goes in it.
+
 ### Addresses
 
 Every source in the list carries an address on its second line: the resolved IP
@@ -123,9 +135,18 @@ Type an address and press Add:
 | `studio-pc.local` | `omt://studio-pc.local:6400` |
 | `fe80::1` | `omt://[fe80::1]:6400` |
 
-Port 6400 is assumed when you do not give one. Entries appear in the source
-list and the tray menu beside discovered ones, and can be viewed or used as the
-webcam source in exactly the same way.
+**Leave the port off and OMT Mini finds everything on that machine.** A host
+running several senders puts them on consecutive ports from the range start, so
+rather than assume only the first, it walks upward from 6400, gives up after ten
+ports with nothing on them, and resets that budget every time it finds
+something. A machine with senders spread across the range is still covered.
+
+Each hit is confirmed as a real OMT sender before it is saved, not just an open
+port, and is named after what it reports itself to be. Give a port explicitly
+and it is taken literally with no scanning.
+
+Entries appear in the source list and the tray menu beside discovered ones, and
+can be viewed or used as the webcam source in exactly the same way.
 
 To remove one, click it in the source list to select it and press Remove. Only
 sources you added by hand can be removed: a discovered one is not yours to
@@ -232,7 +253,7 @@ follow what they do by hand.
 
 ## How it is put together
 
-About 10,300 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
+About 11,800 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
 framework or package manager. The only runtime dependencies are Windows itself
 and the two OMT DLLs.
 
@@ -246,6 +267,8 @@ and the two OMT DLLs.
 | `src/discovery.*` | DNS-SD polling, hand added senders, and the reachability probe |
 | `src/instance.h` | Finding and shutting down a running copy, shared with the installer |
 | `src/netinfo.*` | Local address, host resolution, and reading back which port a sender actually bound to |
+| `src/scan.*` | Walking a host's port range to find every sender on it |
+| `src/multiview.*` | The multiview window and its per tile receivers |
 | `src/viewer.*` | A viewer window and its receiver thread |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |
 | `src/webcam.*` | Receiver writing into a shared memory ring that the filter reads |
@@ -270,7 +293,11 @@ and the two OMT DLLs.
   remote host needs a discovery server, because that is the only remote
   enumeration libomt offers.
 - The reachability dot means a TCP connection was accepted on that port. It
-  does not prove the thing listening is an OMT sender.
+  does not prove the thing listening is an OMT sender. The port walk goes
+  further and confirms each hit properly, but it can only find senders that
+  report their own information, which is how it tells OMT apart from anything
+  else holding a port open.
+- Multiview has no audio. It is a wall, not a monitoring position.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 

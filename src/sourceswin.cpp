@@ -3,9 +3,13 @@
 #include "capture.h"
 #include "webcam.h"
 #include "settings.h"
+#include "scan.h"
+#include "multiview.h"
 #include "omt.h"
 #include "update.h"
 #include "settings.h"
+#include "scan.h"
+#include "multiview.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -107,8 +111,12 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
                    ButtonStyle::Normal))
         App::instance().show_settings(0);
 
+    if (ctx.button(14, ui::rect(ctx.width() - 216.0f, 16.0f, 96.0f, 28.0f), L"Multiview",
+                   ButtonStyle::Normal))
+        App::instance().show_multiview();
+
     // Add a source without going through Settings.
-    if (ctx.icon_button(13, ui::rect(ctx.width() - 148.0f, 16.0f, 28.0f, 28.0f),
+    if (ctx.icon_button(13, ui::rect(ctx.width() - 252.0f, 16.0f, 28.0f, 28.0f),
                         adding_ ? ui::Ctx::Glyph::Close : ui::Ctx::Glyph::Plus)) {
         adding_ = !adding_;
         add_error_.clear();
@@ -130,8 +138,84 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
     }
 }
 
+bool SourcesWindow::on_message(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) {
+    if (msg == WM_OMT_SCAN) {
+        if (wp == 1) scan_pending_ = true;
+        invalidate();
+        result = 0;
+        return true;
+    }
+    return false;
+}
+
+// Takes the results of a finished walk and turns them into saved sources.
+void SourcesWindow::finish_scan() {
+    scan_pending_ = false;
+    const ScanState scan = port_scanner().state();
+
+    if (scan.hits.empty()) {
+        add_error_ = L"Nothing on " + util::widen(scan.host) +
+                     L" answered as an OMT sender. Press Add again to save it anyway.";
+        // A second press with the address unchanged saves it without scanning.
+        add_address_text_ = util::widen(omt::normalize_address(scan.host));
+        return;
+    }
+
+    Settings& cfg = settings();
+    const std::wstring label = util::trim(util::narrow(add_name_text_)).empty()
+                             ? std::wstring()
+                             : add_name_text_;
+    int added = 0;
+    for (const auto& hit : scan.hits) {
+        const bool exists = std::any_of(
+            cfg.manual_sources.begin(), cfg.manual_sources.end(),
+            [&](const ManualSource& m) { return m.address == hit.address; });
+        if (exists) continue;
+
+        ManualSource entry;
+        entry.address = hit.address;
+        // Name it after what it says it is, which beats a bare port number.
+        if (!hit.product.empty()) {
+            entry.name = hit.product;
+        } else if (!label.empty()) {
+            entry.name = util::narrow(label) + " " + std::to_string(hit.port);
+        }
+        cfg.manual_sources.push_back(std::move(entry));
+        ++added;
+    }
+
+    if (added > 0) {
+        cfg.save();
+        discovery().set_manual_sources(cfg.manual_sources);
+    }
+
+    toast_ = added == 1 ? std::wstring(L"Added 1 source")
+                        : fmt(L"Added %d sources", added);
+    if (added == 0) toast_ = L"Those were already in the list";
+    toast_until_ms_ = util::now_ms() + 3000;
+
+    add_address_text_.clear();
+    add_name_text_.clear();
+    add_error_.clear();
+    adding_ = false;
+}
+
 void SourcesWindow::commit_add() {
     Settings& cfg = settings();
+    const std::string typed = util::trim(util::narrow(add_address_text_));
+
+    // No port given means the machine probably has more than one sender on it,
+    // so walk the range rather than assuming only the first.
+    if (!typed.empty() && !omt::has_explicit_port(typed) && add_error_.empty()) {
+        std::string host, port;
+        const std::string probe = omt::normalize_address(typed, cfg.port_start);
+        if (omt::split_address(probe, &host, &port)) {
+            port_scanner().start(host, cfg.port_start, cfg.port_end, 10, hwnd());
+            invalidate();
+            return;
+        }
+    }
+
     const std::string normalized = omt::normalize_address(util::narrow(add_address_text_));
     if (normalized.empty()) {
         add_error_ = L"That address could not be understood.";
@@ -160,7 +244,32 @@ void SourcesWindow::commit_add() {
 float SourcesWindow::draw_add_panel(ui::Ctx& ctx, float top) {
     if (!adding_) return top;
 
-    const float height = add_error_.empty() ? 62.0f : 80.0f;
+    if (scan_pending_) finish_scan();
+    if (!adding_) return top;
+
+    // ---- while a walk is in progress the panel becomes a progress report ----
+    const ScanState scan = port_scanner().state();
+    if (scan.running) {
+        const D2D1_RECT_F panel = D2D1::RectF(0, top, ctx.width(), top + 62.0f);
+        ctx.fill_rect(panel, theme().panel_hi);
+        ctx.separator(0, ctx.width(), panel.bottom - 1.0f);
+
+        ctx.text(ui::rect(16.0f, top + 10.0f, ctx.width() - 120.0f, 20.0f),
+                 fmt(L"Looking for senders on %S", scan.host.c_str()),
+                 Font::BodyBold, theme().text, Align::Left, false);
+        ctx.text(ui::rect(16.0f, top + 30.0f, ctx.width() - 120.0f, 18.0f),
+                 fmt(L"port %d,  %zu found", scan.current_port, scan.hits.size()),
+                 Font::Small, theme().text_dim, Align::Left, false);
+
+        if (ctx.button(34, ui::rect(ctx.width() - 96.0f, top + 16.0f, 80.0f, 28.0f),
+                       L"Stop", ButtonStyle::Normal)) {
+            port_scanner().cancel();
+        }
+        ctx.request_redraw();
+        return panel.bottom;
+    }
+
+    const float height = add_error_.empty() ? 62.0f : 88.0f;
     const D2D1_RECT_F panel = D2D1::RectF(0, top, ctx.width(), top + height);
     ctx.fill_rect(panel, theme().panel_hi);
     ctx.separator(0, ctx.width(), panel.bottom - 1.0f);
@@ -188,11 +297,14 @@ float SourcesWindow::draw_add_panel(ui::Ctx& ctx, float top) {
         invalidate();
     }
 
-    ctx.text(ui::rect(16.0f, y + 30.0f, ctx.width() - 32.0f, 18.0f),
-             add_error_.empty() ? L"Port 6400 is assumed when none is given."
-                                : add_error_.c_str(),
-             Font::Small, add_error_.empty() ? theme().text_dim : theme().danger,
-             Align::Left, false);
+    if (add_error_.empty()) {
+        ctx.text(ui::rect(16.0f, y + 30.0f, ctx.width() - 32.0f, 18.0f),
+                 L"Leave the port off and OMT Mini finds every sender on that machine.",
+                 Font::Small, theme().text_dim, Align::Left, false);
+    } else {
+        ctx.text_wrapped(D2D1::RectF(16.0f, y + 30.0f, ctx.width() - 32.0f, y + 74.0f),
+                         add_error_, Font::Small, theme().warn);
+    }
 
     return panel.bottom;
 }

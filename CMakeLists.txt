@@ -73,6 +73,8 @@ set(OMTMINI_SOURCES
     src/uninstall.cpp
     src/update.cpp
     src/netinfo.cpp
+    src/scan.cpp
+    src/multiview.cpp
 )
 
 add_executable(OMTMini WIN32 ${OMTMINI_SOURCES} res/omtmini.rc)

@@ -17,6 +17,7 @@
 #define WM_OMT_SHOWMAIN (WM_APP + 14)
 #define WM_OMT_UPDATE   (WM_APP + 15)
 #define WM_OMT_INSTALL  (WM_APP + 16)
+#define WM_OMT_SCAN     (WM_APP + 17)
 
 class Window {
 public:

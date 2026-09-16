@@ -94,6 +94,17 @@ void Settings::load() {
     capture_audio           = get_bool(kv, "capture_audio", capture_audio);
     capture_autostart       = get_bool(kv, "capture_autostart", capture_autostart);
 
+    multiview_layout        = clampi(get_int(kv, "multiview_layout", multiview_layout), 0, 15);
+    multiview_preview       = get_bool(kv, "multiview_preview", multiview_preview);
+    multiview_autostart     = get_bool(kv, "multiview_autostart", multiview_autostart);
+    multiview_fullscreen    = get_bool(kv, "multiview_fullscreen", multiview_fullscreen);
+    multiview_sources.clear();
+    for (int i = 0; i < 32; ++i) {
+        auto it = kv.find("multiview_source." + std::to_string(i));
+        if (it == kv.end()) break;
+        multiview_sources.push_back(it->second);
+    }
+
     webcam_source           = get_str(kv, "webcam_source", webcam_source);
     webcam_width            = clampi(get_int(kv, "webcam_width", webcam_width), 160, 3840);
     webcam_height           = clampi(get_int(kv, "webcam_height", webcam_height), 120, 2160);
@@ -164,6 +175,14 @@ void Settings::save() const {
     putb("capture_cursor", capture_cursor);
     putb("capture_audio", capture_audio);
     putb("capture_autostart", capture_autostart);
+
+    out += "\r\n# Multiview\r\n";
+    puti("multiview_layout", multiview_layout);
+    putb("multiview_preview", multiview_preview);
+    putb("multiview_autostart", multiview_autostart);
+    putb("multiview_fullscreen", multiview_fullscreen);
+    for (size_t i = 0; i < multiview_sources.size(); ++i)
+        puts_("multiview_source." + std::to_string(i), multiview_sources[i]);
 
     out += "\r\n# Webcam output\r\n";
     puts_("webcam_source", webcam_source);

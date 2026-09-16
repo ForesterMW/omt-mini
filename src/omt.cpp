@@ -186,6 +186,23 @@ bool split_address(const std::string& address, std::string* host, std::string* p
     return true;
 }
 
+bool has_explicit_port(const std::string& input) {
+    std::string s = util::trim(input);
+    if (s.size() > 6 && util::iequals(s.substr(0, 6), "omt://")) s = s.substr(6);
+    const size_t slash = s.find('/');
+    if (slash != std::string::npos) s = s.substr(0, slash);
+    if (s.empty()) return false;
+
+    if (s[0] == '[') {
+        const size_t close = s.find(']');
+        return close != std::string::npos && close + 1 < s.size() && s[close + 1] == ':';
+    }
+    const size_t colon = s.find(':');
+    if (colon == std::string::npos) return false;
+    // Several colons is a bare IPv6 literal, not a host and port.
+    return s.find(':', colon + 1) == std::string::npos;
+}
+
 std::string normalize_address(const std::string& input, int default_port) {
     std::string s = util::trim(input);
     if (s.empty()) return {};

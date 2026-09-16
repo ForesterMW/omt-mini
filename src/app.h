@@ -10,6 +10,7 @@
 
 class SourcesWindow;
 class SettingsWindow;
+class MultiviewWindow;
 
 class App {
 public:
@@ -24,6 +25,7 @@ public:
     void close_all_viewers();
     void show_sources();
     void show_settings(int tab = 0);
+    void show_multiview();
     bool toggle_desktop_capture();
     bool toggle_webcam();
     // Requests the update install. Safe to call from inside a window's paint:
@@ -62,6 +64,7 @@ private:
     std::vector<std::unique_ptr<ViewerWindow>> viewers_;
     std::unique_ptr<SourcesWindow>  sources_window_;
     std::unique_ptr<SettingsWindow> settings_window_;
+    std::unique_ptr<MultiviewWindow> multiview_window_;
     std::vector<std::string>        menu_sources_;
     bool                            update_announced_ = false;
 };

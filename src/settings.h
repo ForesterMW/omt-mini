@@ -48,6 +48,13 @@ struct Settings {
     bool        capture_audio     = true;     // WASAPI loopback of default device
     bool        capture_autostart = false;
 
+    // ---- Multiview ----
+    int         multiview_layout    = 0;      // index into multiview_layouts()
+    bool        multiview_preview   = true;   // ask senders for their 1/8 stream
+    bool        multiview_autostart = false;
+    bool        multiview_fullscreen = false;
+    std::vector<std::string> multiview_sources;   // one per tile, may be empty
+
     // ---- Webcam output ----
     std::string webcam_source;                // OMT address to feed the vcam
     int         webcam_width      = 1280;

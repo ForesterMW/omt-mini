@@ -109,6 +109,9 @@ std::string normalize_address(const std::string& input, int default_port = 6400)
 // Splits omt://host:port into its parts. IPv6 literals come back without their
 // brackets, which is what getaddrinfo wants. False if it is not a URL address.
 bool split_address(const std::string& address, std::string* host, std::string* port);
+// True when what someone typed already carried a port, so it should be taken
+// literally rather than scanned for.
+bool has_explicit_port(const std::string& input);
 
 // ---- RAII wrappers -----------------------------------------------------
 class Receiver {

@@ -14,12 +14,14 @@ public:
 protected:
     void on_render(ui::Ctx& ctx) override;
     bool on_close_request() override;
+    bool on_message(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) override;
     const wchar_t* class_name() const override { return L"OMTMiniSources"; }
 
 private:
     void draw_header(ui::Ctx& ctx);
     float draw_add_panel(ui::Ctx& ctx, float top);
     void commit_add();
+    void finish_scan();
     void draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area);
     void draw_footer(ui::Ctx& ctx, const D2D1_RECT_F& area);
 
@@ -32,4 +34,5 @@ private:
     std::wstring add_error_;
     std::wstring toast_;
     int64_t      toast_until_ms_ = 0;
+    bool         scan_pending_ = false;   // a finished scan waiting to be taken
 };
