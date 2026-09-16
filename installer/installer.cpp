@@ -13,6 +13,7 @@
 #include <cstdio>
 
 #include "payload.h"
+#include "instance.h"
 
 namespace {
 
@@ -216,9 +217,19 @@ bool extract_entry(const std::wstring& self, const PayloadEntry& entry,
     pos.QuadPart = static_cast<LONGLONG>(entry.offset);
     SetFilePointerEx(src, pos, nullptr, FILE_BEGIN);
 
+    // A file can stay locked for a moment after the process holding it exits,
+    // so a sharing violation is worth retrying before giving up on it.
     const std::wstring out_path = dest_dir + L"\\" + entry.name;
-    HANDLE dst = CreateFileW(out_path.c_str(), GENERIC_WRITE, 0, nullptr,
-                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE dst = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        dst = CreateFileW(out_path.c_str(), GENERIC_WRITE, 0, nullptr,
+                          CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (dst != INVALID_HANDLE_VALUE) break;
+        const DWORD err = GetLastError();
+        if (err != ERROR_SHARING_VIOLATION && err != ERROR_ACCESS_DENIED) break;
+        Sleep(250);
+        pump_messages();
+    }
     if (dst == INVALID_HANDLE_VALUE) {
         CloseHandle(src);
         return false;
@@ -265,18 +276,18 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
         return false;
     }
 
-    // Stop a running copy so its files can be replaced. An update installs
-    // over a copy that is shutting down threads, so wait for the window to go
-    // rather than guessing at a fixed delay.
-    set_status(L"Closing the running copy...");
-    pump_messages();
-    if (HWND running = FindWindowW(L"OMTMiniTray", nullptr)) {
-        PostMessageW(running, WM_CLOSE, 0, 0);
-        for (int i = 0; i < 100 && FindWindowW(L"OMTMiniTray", nullptr); ++i) {
-            Sleep(100);
-            pump_messages();
+    // Stop a running copy so its files can be replaced.
+    if (instance::running()) {
+        set_status(L"Closing the running copy of OMT Mini...");
+        pump_messages();
+        if (!instance::request_quit_and_wait(20000, &pump_messages)) {
+            MessageBoxW(window,
+                L"OMT Mini is still running and will not close.\n\n"
+                L"Right click its tray icon and choose Exit, then press Install "
+                L"again.",
+                kAppName, MB_OK | MB_ICONWARNING);
+            return false;
         }
-        Sleep(300);
     }
 
     if (g_progress) {
@@ -291,8 +302,12 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
         pump_messages();
 
         if (!extract_entry(self, entries[i], dir)) {
-            std::wstring message = L"Could not write " + entries[i].name +
-                                   L".\n\nIs OMT Mini still running?";
+            std::wstring message = L"Could not write " + entries[i].name + L".\n\n";
+            message += instance::running()
+                ? L"OMT Mini is still running. Right click its tray icon, choose "
+                  L"Exit, then try again."
+                : L"The file is locked or the folder is not writable. Check that "
+                  L"no antivirus is holding it.";
             MessageBoxW(window, message.c_str(), kAppName, MB_OK | MB_ICONERROR);
             return false;
         }
@@ -363,11 +378,7 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
 void do_uninstall(bool silent) {
     const std::wstring dir = install_dir();
 
-    HWND running = FindWindowW(L"OMTMiniTray", nullptr);
-    if (running) {
-        SendMessageW(running, WM_CLOSE, 0, 0);
-        Sleep(600);
-    }
+    instance::request_quit_and_wait(15000);
 
     const std::wstring dll = dir + L"\\omtmini_vcam.dll";
     HMODULE mod = LoadLibraryW(dll.c_str());

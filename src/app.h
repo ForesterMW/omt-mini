@@ -26,8 +26,9 @@ public:
     void show_settings(int tab = 0);
     bool toggle_desktop_capture();
     bool toggle_webcam();
-    // Runs the downloaded installer and exits. Only reached from a button
-    // press; nothing in OMT Mini installs an update by itself.
+    // Requests the update install. Safe to call from inside a window's paint:
+    // the work is deferred to the message loop. Only ever reached from a
+    // button press; nothing in OMT Mini installs an update by itself.
     void install_update();
     void notify(const std::wstring& title, const std::wstring& message);
 
@@ -50,6 +51,7 @@ private:
     void update_tray_tip();
     void show_tray_menu();
     void prune_viewers();
+    void do_install_update();
 
     HINSTANCE    instance_ = nullptr;
     HWND         hwnd_ = nullptr;

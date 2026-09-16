@@ -293,6 +293,13 @@ bool App::toggle_webcam() {
 }
 
 void App::install_update() {
+    // Called from a button, which means from inside that window's paint. Doing
+    // the work here would tear the window down while its own render is still
+    // on the stack, so it is deferred to the tray window's message loop.
+    if (hwnd_) PostMessageW(hwnd_, WM_OMT_INSTALL, 0, 0);
+}
+
+void App::do_install_update() {
     const UpdateInfo up = updater().info();
     if (up.state != UpdateState::ReadyToInstall || up.downloaded_path.empty()) return;
 
@@ -306,12 +313,19 @@ void App::install_update() {
 
     util::logf("update: launching installer %s", util::narrow(up.downloaded_path).c_str());
 
-    // The installer closes this copy, replaces the files and starts it again.
+    // Close the windows first so it is visibly acting on the press, then hand
+    // over. The installer waits for this process to release its instance mutex
+    // before it touches any files.
+    if (settings_window_) settings_window_->hide();
+    if (sources_window_)  sources_window_->hide();
+
     const HINSTANCE result = ShellExecuteW(nullptr, L"open", up.downloaded_path.c_str(),
                                            nullptr, nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<INT_PTR>(result) <= 32) {
+        util::logf("update: ShellExecute failed err=%lu", GetLastError());
         MessageBoxW(nullptr, L"The installer could not be started.", L"OMT Mini",
                     MB_OK | MB_ICONERROR);
+        if (settings_window_) settings_window_->show();
         return;
     }
     quit();
@@ -356,6 +370,10 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_OMT_SHOWMAIN:
             show_sources();
+            return 0;
+
+        case WM_OMT_INSTALL:
+            do_install_update();
             return 0;
 
         case WM_OMT_UPDATE: {

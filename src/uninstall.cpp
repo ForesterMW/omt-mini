@@ -1,5 +1,6 @@
 #include "uninstall.h"
 #include "util.h"
+#include "instance.h"
 
 #include <shlobj.h>
 #include <shellapi.h>
@@ -70,12 +71,9 @@ bool silent()    { return has_arg(L"--silent"); }
 void run() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
-    // A copy already in the tray has to go first.
-    HWND running = FindWindowW(L"OMTMiniTray", nullptr);
-    if (running) {
-        SendMessageW(running, WM_CLOSE, 0, 0);
-        Sleep(600);
-    }
+    // A copy already in the tray has to go first. This process is usually that
+    // copy, in which case there is nothing to wait for.
+    instance::request_quit_and_wait(15000);
 
     unregister_vcam();
 

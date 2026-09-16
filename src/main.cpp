@@ -9,13 +9,13 @@
 #include "gfx.h"
 #include "util.h"
 #include "uninstall.h"
+#include "instance.h"
 
 #include <objbase.h>
 
 namespace {
 
-constexpr wchar_t kInstanceMutex[] = L"Local\\OMTMini.SingleInstance";
-constexpr wchar_t kTrayClass[]     = L"OMTMiniTray";
+constexpr wchar_t kInstanceMutex[] = OMTMINI_INSTANCE_MUTEX;
 
 // Per monitor v2 keeps text crisp when a viewer is dragged between displays.
 void enable_dpi_awareness() {
@@ -39,8 +39,9 @@ void enable_dpi_awareness() {
 bool hand_off_to_existing_instance(HANDLE* mutex_out) {
     HANDLE mutex = CreateMutexW(nullptr, TRUE, kInstanceMutex);
     if (mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND existing = FindWindowW(kTrayClass, nullptr);
-        if (existing) PostMessageW(existing, WM_OMT_SHOWMAIN, 0, 0);
+        // Message-only window, so it has to be looked up under HWND_MESSAGE.
+        if (HWND existing = instance::find_tray_window())
+            PostMessageW(existing, WM_OMT_SHOWMAIN, 0, 0);
         CloseHandle(mutex);
         return true;
     }
