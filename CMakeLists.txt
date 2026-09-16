@@ -91,10 +91,10 @@ set_target_properties(omtmini_vcam PROPERTIES
     PREFIX ""
     OUTPUT_NAME "omtmini_vcam"
 )
-if(MINGW)
-    # The .def file keeps the four COM entry points unmangled.
-    target_sources(omtmini_vcam PRIVATE vcam/vcam.def)
-endif()
+# The module definition file is what exports DllGetClassObject and friends.
+# CMake hands a .def source to both the MSVC and the mingw linker, and without
+# it the DLL has no exports and cannot be registered.
+target_sources(omtmini_vcam PRIVATE vcam/vcam.def)
 
 # ------------------------------------------------------------------ installer
 add_executable(omtmini-setup WIN32 installer/installer.cpp res/omtmini.rc)
