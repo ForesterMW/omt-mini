@@ -225,7 +225,8 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                 for (auto& entry : cfg.manual_sources) {
                     if (entry.address != manual_editing_) continue;
                     entry.address = normalized;
-                    entry.name    = util::trim(util::narrow(manual_name_text_));
+                    entry.name    = omt::safe_source_name(util::narrow(manual_name_text_),
+                                                          omt::host_only(normalized));
                     break;
                 }
                 cfg.save();
@@ -237,7 +238,8 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
             } else {
                 ManualSource ms;
                 ms.address = normalized;
-                ms.name    = util::trim(util::narrow(manual_name_text_));
+                ms.name    = omt::safe_source_name(util::narrow(manual_name_text_),
+                                                   omt::host_only(normalized));
                 cfg.manual_sources.push_back(std::move(ms));
                 cfg.save();
                 discovery().set_manual_sources(cfg.manual_sources);

@@ -175,12 +175,15 @@ void SourcesWindow::finish_scan() {
 
         ManualSource entry;
         entry.address = hit.address;
-        // Name it after what it says it is, which beats a bare port number.
-        if (!hit.product.empty()) {
-            entry.name = hit.product;
-        } else if (!label.empty()) {
-            entry.name = util::narrow(label) + " " + std::to_string(hit.port);
-        }
+        // Named after what it says it is, which beats a bare port number, and
+        // never left blank: a nameless source is one other applications on the
+        // network will not list.
+        const std::string preferred = !hit.product.empty()
+            ? hit.product
+            : (label.empty() ? std::string()
+                             : util::narrow(label) + " " + std::to_string(hit.port));
+        entry.name = omt::safe_source_name(
+            preferred, omt::host_only(hit.address) + " " + std::to_string(hit.port));
         cfg.manual_sources.push_back(std::move(entry));
         ++added;
     }
@@ -226,7 +229,8 @@ void SourcesWindow::commit_add() {
         for (auto& entry : cfg.manual_sources) {
             if (entry.address != editing_address_) continue;
             entry.address = normalized;
-            entry.name    = util::trim(util::narrow(add_name_text_));
+            entry.name    = omt::safe_source_name(util::narrow(add_name_text_),
+                                                  omt::host_only(normalized));
             break;
         }
         cfg.save();
@@ -269,7 +273,8 @@ void SourcesWindow::commit_add() {
 
     ManualSource entry;
     entry.address = normalized;
-    entry.name    = util::trim(util::narrow(add_name_text_));
+    entry.name    = omt::safe_source_name(util::narrow(add_name_text_),
+                                          omt::host_only(normalized));
     cfg.manual_sources.push_back(std::move(entry));
     cfg.save();
     discovery().set_manual_sources(cfg.manual_sources);

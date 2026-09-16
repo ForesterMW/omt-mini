@@ -113,6 +113,16 @@ bool split_address(const std::string& address, std::string* host, std::string* p
 // literally rather than scanned for.
 bool has_explicit_port(const std::string& input);
 
+// A name that is safe to advertise. libomt does not sanitise names at all, its
+// SanitizeName returns the string untouched, so whatever is handed over goes
+// straight into the DNS-SD instance name. An empty one produces a nameless
+// source that other applications will not show, and the HOST (NAME) format
+// means brackets in a name break the parsing of it everywhere.
+std::string safe_source_name(const std::string& name, const std::string& fallback);
+// The host part of an address on its own, with no port, for naming a source
+// after the machine it lives on.
+std::string host_only(const std::string& address);
+
 // ---- RAII wrappers -----------------------------------------------------
 class Receiver {
 public:

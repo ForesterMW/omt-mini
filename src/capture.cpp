@@ -236,7 +236,7 @@ void DesktopCapture::run() {
     const auto ports_before = netinfo::listening_ports(cfg.port_start, cfg.port_end);
 
     omt::Sender sender;
-    const std::string name = cfg.capture_name.empty() ? std::string("Desktop") : cfg.capture_name;
+    const std::string name = omt::safe_source_name(cfg.capture_name, "Desktop");
     if (!sender.open(name, static_cast<OMTQuality>(cfg.capture_quality))) {
         fail("omt_send_create failed"); running_ = false; CoUninitialize(); return;
     }

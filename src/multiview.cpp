@@ -417,8 +417,7 @@ void MultiviewOutput::run() {
     const auto ports_before = netinfo::listening_ports(cfg.port_start, cfg.port_end);
 
     omt::Sender sender;
-    const std::string name = cfg.multiview_output_name.empty()
-                           ? std::string("Multiview") : cfg.multiview_output_name;
+    const std::string name = omt::safe_source_name(cfg.multiview_output_name, "Multiview");
     if (!sender.open(name, static_cast<OMTQuality>(cfg.capture_quality))) {
         fail("omt_send_create failed");
         running_ = false;

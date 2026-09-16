@@ -186,6 +186,49 @@ bool split_address(const std::string& address, std::string* host, std::string* p
     return true;
 }
 
+std::string host_only(const std::string& address) {
+    std::string host, port;
+    if (split_address(address, &host, &port)) return host;
+    return host_name(address);
+}
+
+std::string safe_source_name(const std::string& name, const std::string& fallback) {
+    auto clean = [](const std::string& in) {
+        std::string out;
+        out.reserve(in.size());
+        for (unsigned char ch : in) {
+            if (ch < 0x20 || ch == 0x7F) continue;      // control characters
+            if (ch == '(' || ch == ')') continue;       // delimit HOST (NAME)
+            out += (ch == ':') ? ' ' : static_cast<char>(ch);
+        }
+        // Collapse runs of spaces left behind by the removals.
+        std::string collapsed;
+        bool space = false;
+        for (char ch : out) {
+            if (ch == ' ' || ch == '\t') {
+                space = true;
+                continue;
+            }
+            if (space && !collapsed.empty()) collapsed += ' ';
+            space = false;
+            collapsed += ch;
+        }
+        return util::trim(collapsed);
+    };
+
+    std::string result = clean(name);
+    if (result.empty()) result = clean(fallback);
+    if (result.empty()) result = "Source";
+
+    // libomt truncates the whole HOSTNAME (NAME) string to fit its own limit,
+    // which would cut a long name off mid word. Keep well clear of it.
+    if (result.size() > 48) {
+        result.resize(48);
+        result = util::trim(result);
+    }
+    return result;
+}
+
 bool has_explicit_port(const std::string& input) {
     std::string s = util::trim(input);
     if (s.size() > 6 && util::iequals(s.substr(0, 6), "omt://")) s = s.substr(6);
