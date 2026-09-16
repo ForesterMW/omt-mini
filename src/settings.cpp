@@ -118,6 +118,7 @@ void Settings::load() {
     webcam_autostart        = get_bool(kv, "webcam_autostart", webcam_autostart);
 
     identify_sources        = get_bool(kv, "identify_sources", identify_sources);
+    announce_manual_sources = get_bool(kv, "announce_manual_sources", announce_manual_sources);
     check_updates_on_launch = get_bool(kv, "check_updates_on_launch", check_updates_on_launch);
 
     // Manual sources are stored as numbered keys so an address can contain
@@ -132,6 +133,10 @@ void Settings::load() {
         ms.address = it->second;
         auto name_it = kv.find("manual_name." + std::to_string(i));
         if (name_it != kv.end()) ms.name = name_it->second;
+        auto announce_it = kv.find("manual_announce." + std::to_string(i));
+        if (announce_it != kv.end())
+            ms.announce = announce_it->second == "1" ||
+                          util::iequals(announce_it->second, "true");
         manual_sources.push_back(std::move(ms));
     }
 
@@ -209,11 +214,14 @@ void Settings::save() const {
     putb("check_updates_on_launch", check_updates_on_launch);
 
     out += "\r\n# Manually added sources\r\n";
+    putb("announce_manual_sources", announce_manual_sources);
     for (size_t i = 0; i < manual_sources.size(); ++i) {
         const std::string index = std::to_string(i);
         puts_("manual_source." + index, manual_sources[i].address);
         if (!manual_sources[i].name.empty())
             puts_("manual_name." + index, manual_sources[i].name);
+        out += "manual_announce." + index;
+        out += manual_sources[i].announce ? "=1\r\n" : "=0\r\n";
     }
 
     out += "\r\n# Window placement\r\n";

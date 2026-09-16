@@ -3,12 +3,14 @@
 #include "settings.h"
 #include "discovery.h"
 #include "multiview.h"
+#include "announce.h"
 #include "capture.h"
 #include "webcam.h"
 #include "omt.h"
 #include "update.h"
 #include "discovery.h"
 #include "multiview.h"
+#include "announce.h"
 
 #include <shellapi.h>
 #include <algorithm>
@@ -260,6 +262,24 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     y += 26.0f;
 
     ctx.separator(area.left, area.right, y);
+    y += 10.0f;
+
+    // ---- announcing on this network ----
+    if (ctx.checkbox(904, ui::rect(area.left, y, 460.0f, 24.0f),
+                     &cfg.announce_manual_sources,
+                     L"Announce these on this network over mDNS")) {
+        dirty_ = true;
+        announcer().refresh();
+    }
+    y += 26.0f;
+    ctx.text_wrapped(D2D1::RectF(area.left + 28.0f, y, area.right, y + 34.0f),
+                     L"Makes them visible to vMix and anything else that browses for "
+                     L"OMT sources. No video passes through here: an announcement "
+                     L"points at the machine the source lives on.",
+                     Font::Small, theme().text_dim);
+    y += 40.0f;
+
+    ctx.separator(area.left, area.right, y);
     y += 12.0f;
 
     // ---- existing entries ----
@@ -273,6 +293,7 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
 
     const float row_h = 44.0f;
     const D2D1_RECT_F list = D2D1::RectF(area.left, y, area.right, area.bottom);
+    // Three widgets a row now, so the stride has to leave room for them.
     scroll_.content_height = cfg.manual_sources.size() * row_h + 6.0f;
     ctx.begin_scroll(920, list, &scroll_);
 
@@ -282,7 +303,7 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         const auto& m = cfg.manual_sources[i];
         const D2D1_RECT_F rowr = D2D1::RectF(list.left, ry, list.right - 8.0f,
                                              ry + row_h - 6.0f);
-        const auto id = static_cast<ui::Id>(930 + i * 2);
+        const auto id = static_cast<ui::Id>(930 + i * 4);
 
         ctx.fill_rect(rowr, theme().panel, ui::metric::kRadius);
 
@@ -312,6 +333,23 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         if (ctx.button(id, ui::rect(rowr.right - 90.0f, rowr.top + 5.0f, 78.0f, 26.0f),
                        L"Remove", ButtonStyle::Normal))
             remove_index = static_cast<int>(i);
+
+        if (!cfg.announce_manual_sources) {
+            // With the blanket setting off, each source carries its own.
+            const bool on = m.announce;
+            if (ctx.button(id + 2,
+                           ui::rect(rowr.right - 268.0f, rowr.top + 5.0f, 100.0f, 26.0f),
+                           on ? L"Announced" : L"Announce",
+                           on ? ButtonStyle::Primary : ButtonStyle::Normal)) {
+                cfg.manual_sources[i].announce = !on;
+                cfg.save();
+                announcer().refresh();
+                invalidate();
+            }
+        } else if (announcer().is_announced(m.address)) {
+            ctx.badge(rowr.right - 250.0f, rowr.top + 9.0f, 18.0f, L"on mDNS",
+                      theme().ok);
+        }
 
         if (ctx.button(id + 1, ui::rect(rowr.right - 160.0f, rowr.top + 5.0f, 62.0f, 26.0f),
                        L"Edit", ButtonStyle::Normal)) {

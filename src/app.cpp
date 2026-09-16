@@ -7,6 +7,7 @@
 #include "webcam.h"
 #include "settings.h"
 #include "update.h"
+#include "announce.h"
 #include "omt.h"
 #include "gfx.h"
 
@@ -506,6 +507,7 @@ bool App::init(HINSTANCE instance) {
         return false;
     }
 
+    announcer().start();
     discovery().set_manual_sources(settings().manual_sources);
     discovery().start(hwnd_, WM_OMT_SOURCES);
     SetTimer(hwnd_, 99, 1000, nullptr);
@@ -542,6 +544,7 @@ void App::quit() {
     sources_window_.reset();
     settings_window_.reset();
 
+    announcer().stop();
     multiview_output().stop();
     webcam().stop();
     desktop_capture().stop();

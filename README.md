@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 902 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 932 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -64,6 +64,10 @@ it reports itself to be. Another OMT Mini shows up in green.
 addressed directly, the same idea as Access Manager in NDI Tools. They are
 tagged `direct` and carry a green or red dot, because something added by hand
 can be saved and then be switched off.
+
+They can also be **announced on mDNS**, which makes them visible to vMix and
+anything else browsing for OMT sources, without any video passing through this
+machine.
 
 **One click updates.** Checks the public GitHub releases and installs the
 latest stable build without leaving the window.
@@ -204,6 +208,29 @@ has not been checked yet. A red one can still be opened: the viewer sits at
 "connecting" and picks the source up the moment it comes back. Discovered
 sources are always green, since they would not be advertised otherwise.
 
+#### Making them visible to vMix and everything else
+
+A source you added by address is, by definition, one this network could not
+see. **Settings > Sources > Announce these on this network** puts them on
+**mDNS**, which is how vMix, the OBS plugin and every other OMT tool browse for
+sources. They appear in those applications' source lists by name, like any
+other source. Nobody has to type an address anywhere.
+
+It is on by default. Turn it off and each entry gets its own Announce button,
+so you can pick.
+
+**No video passes through OMT Mini.** Each announcement is a sender that
+carries nothing and redirects to the machine the source actually lives on,
+which is what OMT calls a virtual source. Whatever connects is sent straight to
+the original host for the pictures, so this machine is not in the media path
+and adds no latency or bandwidth.
+
+Only hand added sources are announced. Anything already discovered is already
+on mDNS, and re-announcing it would put it on the network twice. A machine that
+picks up one of these announcements sees it as a discovered source rather than
+a hand added one, so it will not announce it onward either, and OMT Mini
+filters its own announcements back out of its own list.
+
 Each entry points at one sender. To enumerate every source on a remote host
 instead, run an
 [OMT Discovery Server](https://github.com/openmediatransport/OMTDiscoveryServer)
@@ -298,7 +325,7 @@ follow what they do by hand.
 
 ## How it is put together
 
-About 12,800 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
+About 13,300 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
 framework or package manager. The only runtime dependencies are Windows itself
 and the two OMT DLLs.
 
@@ -313,6 +340,7 @@ and the two OMT DLLs.
 | `src/instance.h` | Finding and shutting down a running copy, shared with the installer |
 | `src/netinfo.*` | Local address, host resolution, and reading back which port a sender actually bound to |
 | `src/scan.*` | Walking a host's port range to find every sender on it |
+| `src/announce.*` | Putting hand added sources on mDNS as redirecting virtual sources |
 | `src/multiview.*` | The multiview engine, its window, and the output that composes it into an OMT sender |
 | `src/viewer.*` | A viewer window and its receiver thread |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |

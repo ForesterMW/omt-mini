@@ -357,6 +357,11 @@ void Sender::set_sender_info(const char* product, const char* manufacturer, cons
     g_api.send_setsenderinformation(inst_, &info);
 }
 
+void Sender::set_redirect(const std::string& address) {
+    if (!inst_) return;
+    g_api.send_setredirect(inst_, address.empty() ? nullptr : address.c_str());
+}
+
 bool Sender::get_tally(int timeout_ms, OMTTally* out) {
     if (!inst_) return false;
     return g_api.send_gettally(inst_, timeout_ms, out) != 0;

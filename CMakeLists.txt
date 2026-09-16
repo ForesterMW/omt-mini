@@ -74,6 +74,7 @@ set(OMTMINI_SOURCES
     src/update.cpp
     src/netinfo.cpp
     src/scan.cpp
+    src/announce.cpp
     src/multiview.cpp
 )
 

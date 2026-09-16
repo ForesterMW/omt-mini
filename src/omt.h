@@ -157,6 +157,10 @@ public:
     int  connections();
     std::string address();
     void set_sender_info(const char* product, const char* manufacturer, const char* version);
+    // Tells anything that connects to go and get the media from somewhere else.
+    // This is what OMT calls a virtual source: the sender is announced on the
+    // network but carries nothing itself.
+    void set_redirect(const std::string& address);
     bool get_tally(int timeout_ms, OMTTally* out);
     void video_stats(OMTStatistics* out);
 

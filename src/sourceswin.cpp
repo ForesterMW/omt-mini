@@ -5,11 +5,13 @@
 #include "settings.h"
 #include "scan.h"
 #include "multiview.h"
+#include "announce.h"
 #include "omt.h"
 #include "update.h"
 #include "settings.h"
 #include "scan.h"
 #include "multiview.h"
+#include "announce.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -436,6 +438,11 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
 
         if (s.is_manual)     add_tag(L"direct", theme().badge_direct);
         else if (s.is_local) add_tag(L"this machine", theme().accent_hi);
+
+        // Being announced means the rest of the network can see it too, which
+        // is worth saying on the row rather than only in settings.
+        if (s.is_manual && announcer().is_announced(s.address))
+            add_tag(L"on mDNS", theme().ok);
 
         // What the sender says it is. Green for another OMT Mini, so a feed
         // that will behave exactly like this one is obvious at a glance.

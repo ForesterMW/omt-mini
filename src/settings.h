@@ -14,6 +14,8 @@ extern "C" {
 struct ManualSource {
     std::string address;   // omt://host:port
     std::string name;      // optional label, falls back to the address
+    // Consulted only when announce_manual_sources is off.
+    bool        announce = true;
 };
 
 struct Settings {
@@ -75,6 +77,11 @@ struct Settings {
     // with mDNS blocked. Addressed directly as omt://host:port, which is what
     // libomt accepts in place of a discovered name.
     std::vector<ManualSource> manual_sources;
+
+    // Put hand added sources on this network over mDNS, so vMix and anything
+    // else that browses for OMT sources can see them. Announcements carry no
+    // media: they redirect to the machine the source actually lives on.
+    bool        announce_manual_sources = true;
 
     // Briefly connects to each newly seen source, requesting metadata only, to
     // read the product name it reports. Costs the sender one short connection

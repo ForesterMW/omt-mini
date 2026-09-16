@@ -6,6 +6,7 @@
 #include "omt.h"
 #include "settings.h"
 #include "netinfo.h"
+#include "announce.h"
 
 #include <algorithm>
 
@@ -99,6 +100,8 @@ void Discovery::set_manual_sources(const std::vector<ManualSource>& manual) {
     // find out whether the new entry answers.
     wake_ = true;
     probe_now_ = true;
+    // What is announced follows what is in the list.
+    announcer().refresh();
     if (window_) PostMessageW(window_, message_, 0, 0);
 }
 
@@ -255,6 +258,19 @@ void Discovery::run() {
 
         std::sort(current.begin(), current.end());
         current.erase(std::unique(current.begin(), current.end()), current.end());
+
+        // Our own announcements come back to us over mDNS like anything else.
+        // Dropped here, before identification or the list is built, so a hand
+        // added source does not also appear as a discovered one.
+        const auto ours = announcer().advertised_addresses();
+        if (!ours.empty()) {
+            current.erase(std::remove_if(current.begin(), current.end(),
+                                         [&](const std::string& address) {
+                                             return std::find(ours.begin(), ours.end(),
+                                                              address) != ours.end();
+                                         }),
+                          current.end());
+        }
 
         bool manual_changed = false;
         {
