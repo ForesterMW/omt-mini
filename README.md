@@ -1,109 +1,128 @@
 # OMT Mini
 
-A single tray application for [Open Media Transport](https://openmediatransport.org),
-the open, royalty free video over LAN protocol published by vMix and the Open
-Media Transport contributors.
+**Every Open Media Transport tool you need on Windows, in one tray icon.**
+Viewer, multiviewer, screen capture, virtual webcam and source management, in a
+939 KB executable that idles at effectively zero CPU.
 
-Find sources on your network, open as many live viewers as you want, share a
-screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 932 KB executable that sits at effectively zero CPU when idle.
+[![Latest release](https://img.shields.io/github/v/release/ForesterMW/omt-mini?label=download&color=3b82f6)](../../releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/ForesterMW/omt-mini/total?color=22c55e)](../../releases)
+[![License](https://img.shields.io/badge/licence-MIT-informational)](LICENSE)
+![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
 
-If you have used NDI Tools, this covers the same ground as Studio Monitor,
-Screen Capture and Webcam Input, except it is one icon instead of several
-programs, and it speaks OMT rather than NDI.
+[Open Media Transport](https://openmediatransport.org) is the open, royalty
+free video over LAN protocol published by vMix and the OMT contributors, and an
+alternative to NDI that costs nothing to implement. OMT Mini is a complete set
+of everyday tools for it, as one small program rather than several.
+
+## What it replaces
+
+If you know NDI Tools, you already know what this is.
+
+| NDI Tools | OMT Mini | |
+|---|---|---|
+| Studio Monitor | **Viewer** | As many at once as your machine will carry |
+| Screen Capture | **Desktop capture** | Any monitor, cursor and system audio |
+| Webcam Input | **Virtual webcam** | Appears as a camera in Teams, Zoom, OBS |
+| Access Manager | **Direct sources** | Reach a sender on another subnet, and put it on mDNS for everyone else |
+| Studio Monitor, several of them | **Multiview** | One wall, seven layouts, and it can be sent as a source of its own |
+
+All of it from one tray icon, one install, one thing to update.
 
 ## Features
 
-**Viewers.** Every source opens in its own window, so you can watch as many
-feeds at once as your machine will carry.
+### Viewers
 
-- Colour conversion and scaling happen in a pixel shader, so a 1080p60 feed
-  costs almost no CPU
+Every source opens in its own window. Open as many as you like.
+
+- Colour conversion and scaling run in a pixel shader, so a 1080p60 feed costs
+  almost no CPU
 - Audio monitoring with per channel dBFS meters, volume and mute
-- Tally display: shows what the source reports across all of its receivers,
-  as PGM and PVW lamps and a coloured strip along the top of the window. OMT
-  Mini never asserts tally of its own. It is a monitor, and a monitor that
-  told a source it was on air just because someone opened a window on it
-  would be worse than useless
-- Statistics panel with frame rate, bitrate, decode time and dropped frames
-- Quality suggestion sent upstream to the sender
-- Low bandwidth mode, which pulls the sender's one eighth preview stream
-  instead of the full feed
-- Frame and connection metadata, full screen, always on top
+- Tally display, red for program and green for preview, as lamps and a strip
+  along the top of the window
+- Statistics panel: frame rate, bitrate, decode time, dropped frames, the
+  sender's own product name and the address it is on
+- Quality suggestion sent upstream, and a low bandwidth mode that pulls the
+  sender's one eighth preview stream instead of the full feed
+- Full screen, always on top, frame and connection metadata
 
-**Desktop capture.** Publishes a monitor as an OMT source using DXGI Desktop
-Duplication, at 50 fps by default, with optional mouse cursor and system audio
-via WASAPI loopback.
+### Multiview
 
-**Multiview.** One window showing many sources at once, in `2x2`, `3x2`, `3x3`,
-`4x3`, `4x4`, or the classic hero shapes `1 + 5` and `1 + 7`. Tally borders the
-whole cell. Full screen on `F11` or a double click, and it can open with OMT
-Mini and go straight to full screen.
+One window showing many sources at once, in `2x2`, `3x2`, `3x3`, `4x3`, `4x4`,
+or the classic hero shapes `1 + 5` and `1 + 7`.
 
-Tiles receive in OMT's **preview mode** by default, which is the sender's own
-one eighth resolution stream, so sixteen tiles cost a fraction of sixteen full
-feeds. Switch to full feeds from the toolbar if you need to see detail.
+- Click any cell to choose what goes in it
+- Tally borders the whole cell
+- Full screen on `F11` or a double click, and it can open at startup straight
+  into full screen
+- Tiles use OMT's **preview mode** by default, the sender's own one eighth
+  stream, so sixteen tiles cost a fraction of sixteen full feeds
+- When the pointer stops moving the controls and labels fade away and you are
+  left with nothing but pictures
 
-**Multiview as a source.** The wall can be sent to the network as a single OMT
-source, so one machine builds it and every other machine just receives it. It
-does not need the window open to do that, so a spare box can build a wall
-headless and hand it to the gallery.
+**The wall can be sent to the network as a single OMT source.** One machine
+builds it, every other machine just receives it, and it does not need the
+window open to do that, so a spare box can compose a wall headless and hand it
+to the gallery.
 
-**Webcam output.** Receives an OMT source and presents it to other applications
-as a normal camera named "OMT Mini Virtual Camera", so you can put a network
-feed into Teams, Zoom, OBS or anything else that accepts a webcam.
+### Desktop capture
 
-**The source list** shows the address of every source beside its name, so the
-thing you would have to type into another machine is never something you have
-to go and look up. It tags what it finds. Anything advertised by the machine you
-are sitting at is marked `this machine`, so it is obvious at a glance which
-feeds are not crossing the network, and every source carries a tag saying what
-it reports itself to be. Another OMT Mini shows up in green.
+Publishes a monitor as an OMT source using DXGI Desktop Duplication, at 50 fps
+by default, with optional mouse cursor and system audio via WASAPI loopback. It
+shows the address other machines should use to reach it, with a Copy button.
 
-**Sources added by hand.** Senders that automatic discovery cannot see can be
-addressed directly, the same idea as Access Manager in NDI Tools. They are
-tagged `direct` and carry a green or red dot, because something added by hand
-can be saved and then be switched off.
+### Virtual webcam
 
-They can also be **announced on mDNS**, which makes them visible to vMix and
-anything else browsing for OMT sources, without any video passing through this
-machine.
+Receives an OMT source and presents it to other applications as a normal camera
+called "OMT Mini Virtual Camera", so a network feed can go into Teams, Zoom,
+OBS or anything else that takes a webcam. Registers under `HKEY_CURRENT_USER`,
+so no administrator prompt.
 
-**One click updates.** Checks the public GitHub releases and installs the
-latest stable build without leaving the window.
+### Sources, found and added
 
-**Settings**, in tabs: General, Sources, Network, Viewer, Desktop, Webcam,
-About. The Network tab drives libomt's own discovery server address and sender
-port range.
+Sources on the local network appear automatically. The list tells you what each
+one is: `this machine` for your own, `direct` for one you added, the product it
+reports itself to be, green for another OMT Mini, and a green or red dot for
+whether an added source is answering.
+
+For a sender this network cannot see, on another subnet, at the far end of a
+VPN, or on a host with mDNS blocked, add it by address. **Leave the port off
+and OMT Mini finds every sender on that machine**, walking the port range and
+confirming each one is really an OMT sender before saving it.
+
+Added sources can then be **announced on mDNS**, which makes them visible to
+vMix and everything else that browses for OMT sources, with no video passing
+through this machine.
+
+### Kept up to date
+
+Checks the public GitHub releases and installs the latest stable build in one
+press, verified against its published checksum. Checking and installing are
+deliberately separate, because a machine that is on air should never restart
+itself.
 
 ## Install
 
-Download the latest [release](../../releases):
+Download the latest [release](../../releases/latest):
 
-- **`OMTMini-Setup-<version>.exe`** installs to
+- **`OMTMini-Setup-<version>.exe`** (8.7 MB) installs to
   `%LOCALAPPDATA%\Programs\OMT Mini`. It writes nothing outside your user
-  profile, so no administrator prompt appears, at install or at any point
-  afterwards.
-- **`OMTMini-<version>-win64.zip`** is the same files, portable. Unzip and run
-  `OMTMini.exe`. Keep the folder intact: the executable loads `libomt.dll`
-  and `libvmx.dll` from beside itself.
+  profile, so **no administrator prompt**, at install or ever after.
+- **`OMTMini-<version>-win64.zip`** (3.8 MB) is the same files, portable.
+  Unzip and run `OMTMini.exe`.
 
-Requires Windows 10 or 11, 64 bit. Settings and logs are kept in
-`%APPDATA%\OMT Mini`.
-
+Windows 10 or 11, 64 bit. Settings and logs live in `%APPDATA%\OMT Mini`.
 To remove it, use Apps & features, or run `OMTMini.exe --uninstall`.
 
-`SHA256SUMS-<version>.txt` in each release covers both downloads.
+Most of the download is the official `libomt.dll` and `libvmx.dll` from the
+Open Media Transport project, redistributed unmodified. OMT Mini itself is
+939 KB.
 
 ## Using it
 
 Left click the tray icon for the source list. Right click it for a menu:
-sources, desktop capture, the webcam output and settings.
+sources, multiview, desktop capture, the webcam output and settings.
 
-Sources on the local network are discovered automatically over DNS-SD and
-appear within a second or two.
-
-Keyboard shortcuts in a viewer window:
+Keyboard, in a viewer or the multiview:
 
 | Key | Action |
 |---|---|
@@ -115,184 +134,67 @@ Keyboard shortcuts in a viewer window:
 | `T` | Always on top |
 | Double click | Full screen |
 
-### Multiview
-
-Open it from the tray menu or the **Multiview** button in the source list.
-
-Layouts are `2x2`, `3x2`, `3x3`, `4x3`, `4x4`, and the classic hero shapes
-`1 + 5` and `1 + 7`. Click any cell to choose what goes in it. Tally borders
-the whole cell, and the name and resolution sit along the bottom of it.
-
-`F`, `F11` or a double click goes full screen, `Esc` comes back. **Open at
-startup** is in the toolbar, and it remembers whether it was full screen.
-
-Tiles receive in OMT's **preview mode** by default, the sender's own one eighth
-resolution stream, and they suggest low quality, so a wall never becomes the
-reason a sender lifts its encoding for everyone else watching it. Switch to
-full feeds from the toolbar when you need detail.
-
-Changing layout reuses the receivers already running rather than reconnecting
-everything, and a tile whose source is not up yet keeps retrying, since a wall
-gets left running for hours.
-
-When the pointer stops moving, or leaves the window, the toolbar and the tile
-labels both fade out and you are left with nothing but pictures. Tally stays
-put: it is the one thing always worth seeing.
-
-#### Sending the wall to other machines
-
-**Settings > Multiview**, the toolbar button, or the Multiview output row in the
-source list. The wall is composed to a real frame, labelled and tallied, and
-published as an ordinary OMT source that anything can receive, including another
-copy of OMT Mini.
-
-It is independent of the window. Close the wall and it keeps sending; turn on
-**Start sending when OMT Mini launches** and leave **open the window** off, and
-the machine builds and sends a wall with nothing on screen at all.
-
-Resolution and frame rate are configurable, 1080p25 by default. The composed
-frame is built on the GPU and read back once per frame, so the cost is the
-readback rather than sixteen decodes twice over.
-
-### Addresses
-
-Every source in the list carries an address on its second line: the resolved IP
-for a discovered source, or the `omt://host:port` for one added by hand. A
-viewer shows the same thing in its statistics panel.
-
-Desktop capture shows the address **other machines** should use to reach it,
-next to the Start button, with a Copy button. libomt does not report which port
-a sender bound to, so OMT Mini reads it back from the system rather than
-guessing, which means the address shown is the real one.
-
 ### Adding a source by address
 
-Discovery only reaches the local network. When a sender is somewhere it cannot
-be seen, a different subnet, the far end of a VPN, or a host where mDNS is
-blocked, press **+** in the source list, or add it under **Settings > Sources**.
-
-Type an address and press Add:
+Press **+** in the source list, or use **Settings > Sources**.
 
 | You type | OMT Mini uses |
 |---|---|
-| `10.0.0.5` | `omt://10.0.0.5:6400` |
-| `10.0.0.5:6500` | `omt://10.0.0.5:6500` |
-| `studio-pc.local` | `omt://studio-pc.local:6400` |
+| `10.0.0.5` | walks the machine and finds every sender on it |
+| `10.0.0.5:6500` | `omt://10.0.0.5:6500`, exactly as given |
+| `studio-pc.local` | walks that host |
 | `fe80::1` | `omt://[fe80::1]:6400` |
 
-**Leave the port off and OMT Mini finds everything on that machine.** A host
-running several senders puts them on consecutive ports from the range start, so
-rather than assume only the first, it walks upward from 6400, gives up after ten
-ports with nothing on them, and resets that budget every time it finds
-something. A machine with senders spread across the range is still covered.
+Leaving the port off walks upward from 6400, gives up after ten ports with
+nothing on them, and resets that budget every time it finds something, so a
+machine with senders spread across the range is still covered. Each hit is
+confirmed as a real OMT sender, not merely an open port, and named after what
+it reports itself to be.
 
-Each hit is confirmed as a real OMT sender before it is saved, not just an open
-port, and is named after what it reports itself to be. Give a port explicitly
-and it is taken literally with no scanning.
+Click an entry to select it and it offers **Edit** and **Remove**. Only sources
+you added by hand can be changed: a discovered one is not yours to delete, and
+would come straight back.
 
-Entries appear in the source list and the tray menu beside discovered ones, and
-can be viewed or used as the webcam source in exactly the same way.
+### Announcing added sources to the rest of the network
 
-Click an entry in the source list to select it, and it offers **Edit** and
-**Remove**. Editing loads it back into the add panel, where the address is then
-taken exactly as typed rather than walked. Both are also in
-**Settings > Sources**.
+A source you added by address is one this network could not see. vMix and every
+other OMT tool find sources by browsing mDNS, so **Settings > Sources >
+Announce direct sources over mDNS** puts them there. They then appear in those
+applications by name, like any other source, with nobody typing an address.
 
-Only sources you added by hand can be edited or removed: a discovered one is
-not yours to change, and would simply come back.
+On by default. Turn it off and each entry gets its own Announce button.
 
-They are tagged `direct` and carry a status dot, checked every eight seconds
-with a plain TCP connect, which costs far less than standing up a receiver to
-find out. Green means the sender answered, red means it did not, grey means it
-has not been checked yet. A red one can still be opened: the viewer sits at
-"connecting" and picks the source up the moment it comes back. Discovered
-sources are always green, since they would not be advertised otherwise.
-
-#### Making them visible to vMix and everything else
-
-A source you added by address is, by definition, one this network could not
-see. **Settings > Sources > Announce these on this network** puts them on
-**mDNS**, which is how vMix, the OBS plugin and every other OMT tool browse for
-sources. They appear in those applications' source lists by name, like any
-other source. Nobody has to type an address anywhere.
-
-It is on by default. Turn it off and each entry gets its own Announce button,
-so you can pick.
-
-A source added without a name is called `Direct source`, numbered if there is
-more than one, and you can rename it at any time. It is deliberately not named
-after its address: a dot ends a label in DNS-SD and libomt does not escape
-them, so anything named after an IP is not announced at all. Dots are stripped
-out of names you type for the same reason.
-
-**No video passes through OMT Mini.** Each announcement is a sender that
+**No video passes through this machine.** Each announcement is a sender that
 carries nothing and redirects to the machine the source actually lives on,
 which is what OMT calls a virtual source. Whatever connects is sent straight to
 the original host for the pictures, so this machine is not in the media path
 and adds no latency or bandwidth.
 
-Only hand added sources are announced. Anything already discovered is already
-on mDNS, and re-announcing it would put it on the network twice. A machine that
-picks up one of these announcements sees it as a discovered source rather than
-a hand added one, so it will not announce it onward either, and OMT Mini
-filters its own announcements back out of its own list.
+Only added sources are announced. Anything already discovered is already on
+mDNS, and a machine that picks up one of these announcements sees it as a
+discovered source rather than an added one, so it will not announce it onward.
 
-Each entry points at one sender. To enumerate every source on a remote host
-instead, run an
-[OMT Discovery Server](https://github.com/openmediatransport/OMTDiscoveryServer)
-and set its address under Settings > Network.
-
-### What a source says it is
-
-OMT senders describe themselves through `OMTSenderInfo`, a product name, a
-manufacturer and a version. The source list shows that as a tag beside the
-name, in grey for anything else and **green for another OMT Mini**.
-
-That information only travels once a receiver is attached, so it cannot come
-from discovery on its own. OMT Mini asks by opening a **metadata only**
-receiver: no video or audio is requested, so it costs the sender one short
-connection and nothing else, and the answer is remembered for as long as the
-source stays on the network. It happens once per source, not on a timer.
-
-Turn it off under Settings > General if you would rather nothing connected to a
-source until you open it.
-
-A viewer shows the same tag without any of that, because it is already
-connected.
-
-### Updates
-
-**Settings > About** shows the running version, checks GitHub for the latest
-stable release, and installs it in one press. The download is verified against
-the `SHA256SUMS` file published with the release before it is run, and a
-download that does not match is discarded.
-
-The repository is public, so no account, token or sign in is involved.
-
-Checking happens on launch by default and can be turned off. Installing is
-always a separate, explicit press: nothing here restarts the application on its
-own, which matters if the machine is on air.
+A source added without a name is called `Direct source` and can be renamed. It
+is deliberately not named after its address: a dot ends a label in DNS-SD and
+libomt does not escape them, so anything named after an IP is not announced at
+all.
 
 ### Firewall
 
-OMT Mini's own senders bind to TCP ports 6400 to 6600 by default, which you can
-change under Settings > Network. Allow that range, and allow mDNS on UDP 5353
-for discovery, if your firewall does not already.
+OMT Mini's senders bind to TCP 6400 to 6600 by default, which you can change
+under Settings > Network. Allow that range, and mDNS on UDP 5353 for discovery.
 
 ### The virtual camera
 
-Other applications only see the camera once its DirectShow filter has been
-registered. The installer offers to do this, or you can do it later from
-Settings > Webcam > Register.
-
+Other applications only see the camera once its DirectShow filter is
+registered. The installer offers to do it, or use Settings > Webcam > Register.
 Registration writes to `HKEY_CURRENT_USER` only, which is why it needs no
-elevation, and it is undone by Unregister or by uninstalling.
+elevation, and Unregister or uninstalling undoes it.
 
 ## Build
 
-The repository builds without any downloads: the `libomt.h` header it compiles
-against is vendored in `external/omt`, and `libomt.dll` is loaded at runtime
-rather than linked.
+The repository builds with no downloads: the `libomt.h` it compiles against is
+vendored, and `libomt.dll` is loaded at runtime rather than linked.
 
 Cross compiling from Linux with mingw-w64 is the tested path, and is how the
 releases are built:
@@ -302,98 +204,84 @@ sudo apt install mingw-w64 cmake zip
 ./scripts/cross-build.sh
 ```
 
-Building on Windows with MSVC and CMake should also work, though it is not
-exercised by the releases:
+On Windows with MSVC and CMake, which is not exercised by the releases:
 
 ```
 cmake -B build
 cmake --build build --config Release
 ```
 
-To run what you built, put `libomt.dll` and `libvmx.dll` next to `OMTMini.exe`.
+To run it, put `libomt.dll` and `libvmx.dll` next to `OMTMini.exe`.
 `./scripts/fetch-omt.sh` downloads them from the official
-[libomtnet release](https://github.com/openmediatransport/libomtnet/releases)
-into `external/omt/bin/`, or you can take them from a release archive. They are
-not committed here, so this repository stays free of binaries you would
-otherwise have to take on trust.
+[libomtnet release](https://github.com/openmediatransport/libomtnet/releases),
+or take them from a release archive. They are not committed here, so this
+repository stays free of binaries you would have to take on trust.
 
-To produce the release artifacts, a portable zip and the self extracting
-installer, in `dist/`:
+Release artifacts, the portable zip and the installer, in `dist/`:
 
 ```
-./scripts/fetch-omt.sh
-./scripts/cross-build.sh
-./scripts/package.sh
+./scripts/fetch-omt.sh && ./scripts/cross-build.sh && ./scripts/package.sh
 ```
 
-The shell scripts need bash. On Windows, run them under Git Bash or WSL, or
-follow what they do by hand.
+The shell scripts need bash. On Windows use Git Bash or WSL.
 
 ## How it is put together
 
-About 13,300 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with no
-framework or package manager. The only runtime dependencies are Windows itself
-and the two OMT DLLs.
+About 13,400 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with
+no framework and no package manager. The only runtime dependencies are Windows
+itself and the two OMT DLLs.
 
 | Area | What it does |
 |---|---|
-| `src/omt.*` | Binding to `libomt.dll`. Loaded with `LoadLibrary` rather than linked, so a missing runtime produces a readable message instead of a process that will not start |
-| `src/gfx.*` | One shared D3D11 device. Each window gets a flip model swap chain with a Direct2D context bound to the same back buffer, so video and interface composite without an intermediate copy. UYVY, UYVA and BGRA convert in a pixel shader |
-| `src/ui.*` | Immediate mode widgets drawn with Direct2D. Windows repaint on demand, so an idle window costs nothing |
-| `src/window.*` | Window base class, DPI handling, input translation |
-| `src/update.*` | Update check and install over WinHTTP, with SHA-256 verification through BCrypt |
-| `src/discovery.*` | DNS-SD polling, hand added senders, and the reachability probe |
-| `src/instance.h` | Finding and shutting down a running copy, shared with the installer |
-| `src/netinfo.*` | Local address, host resolution, and reading back which port a sender actually bound to |
-| `src/scan.*` | Walking a host's port range to find every sender on it |
-| `src/announce.*` | Putting hand added sources on mDNS as redirecting virtual sources |
+| `src/omt.*` | Binding to `libomt.dll`, loaded with `LoadLibrary` so a missing runtime says so rather than failing to start |
+| `src/gfx.*` | One shared D3D11 device. Each window gets a flip model swap chain with a Direct2D context on the same back buffer, so video and interface composite without an intermediate copy. UYVY, UYVA and BGRA convert in a pixel shader |
+| `src/ui.*` | Immediate mode widgets on Direct2D. Windows repaint on demand, so an idle window costs nothing |
+| `src/window.*` | Window base, DPI, input |
+| `src/viewer.*` | A viewer and its receiver thread |
 | `src/multiview.*` | The multiview engine, its window, and the output that composes it into an OMT sender |
-| `src/viewer.*` | A viewer window and its receiver thread |
+| `src/discovery.*` | DNS-SD polling, added senders, reachability, identification |
+| `src/announce.*` | Putting added sources on mDNS as redirecting virtual sources |
+| `src/scan.*` | Walking a host's port range to find every sender on it |
 | `src/capture.*` | Desktop Duplication into an OMT sender, on its own device and thread |
-| `src/webcam.*` | Receiver writing into a shared memory ring that the filter reads |
-| `vcam/` | The DirectShow source filter. Written against the raw COM interfaces because the DirectShow base classes are an MSVC sample that a mingw cross build cannot use |
+| `src/webcam.*` | Receiver writing into a shared memory ring the filter reads |
+| `src/update.*` | Update check and install over WinHTTP, verified with BCrypt |
+| `src/netinfo.*` | Local address, host resolution, and reading back which port a sender took |
+| `vcam/` | The DirectShow source filter, written against raw COM because the DirectShow base classes are an MSVC sample a mingw cross build cannot use |
 | `installer/` | Self extracting per user installer, payload appended to the executable |
 
 ## Known limits
 
-- **The virtual camera is the least proven part of this.** A DirectShow filter
-  is loaded into other applications' processes and behaviour varies between
-  hosts, so treat it as beta. If a particular application does not see the
-  camera or misbehaves with it, please
-  [open an issue](../../issues) and say which application and which Windows
+- **The virtual camera is the least proven part.** A DirectShow filter is
+  loaded into other applications' processes and behaviour varies between hosts,
+  so treat it as beta. If an application does not see the camera, please
+  [open an issue](../../issues) saying which application and which Windows
   version.
-- 64 bit host applications only. A 32 bit application looking for a camera will
-  not find it yet.
+- 64 bit host applications only for the camera. A 32 bit one will not find it.
 - P216 and PA16 high bit depth formats are received by libomt but not yet
-  rendered, so they are not offered in the format list.
-- Desktop capture sends at the monitor's native resolution. There is no
-  downscale option yet.
-- A hand added source addresses one sender directly. Listing everything on a
-  remote host needs a discovery server, because that is the only remote
-  enumeration libomt offers.
-- The reachability dot means a TCP connection was accepted on that port. It
-  does not prove the thing listening is an OMT sender. The port walk goes
-  further and confirms each hit properly, but it can only find senders that
-  report their own information, which is how it tells OMT apart from anything
-  else holding a port open.
-- Multiview has no audio, whether on screen or sent. It is a wall, not a
-  monitoring position.
+  rendered, so they are not offered.
+- Desktop capture sends at the monitor's native resolution.
+- Multiview has no audio, on screen or sent. It is a wall, not a monitoring
+  position.
+- An added source addresses one sender. Listing everything on a remote host
+  needs a discovery server, which is the only remote enumeration libomt offers.
+- The reachability dot means a TCP connection was accepted, not that an OMT
+  sender is behind it. The port walk goes further and confirms each hit.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 
 ## Contributing
 
-Issues and pull requests are welcome, particularly reports of host applications
-that do not get on with the virtual camera. There is no contributor licence
-agreement and no style config to install; match the surrounding code.
+Issues and pull requests are welcome, particularly reports of applications that
+do not get on with the virtual camera. No contributor licence agreement, no
+style config to install; match the surrounding code.
 
 ## Credits and licence
 
-OMT Mini is MIT licensed. See [LICENSE](LICENSE).
+MIT licensed, see [LICENSE](LICENSE).
 
-It uses `libomt` and `libvmx` from the Open Media Transport project, which are
-MIT licensed and redistributed unmodified in the release archives. Their licence
-is included as `LICENSE-libomt.txt`.
+Uses `libomt` and `libvmx` from the Open Media Transport project, MIT licensed
+and redistributed unmodified in the release archives. Their licence is included
+as `LICENSE-libomt.txt`.
 
-This project is not affiliated with, endorsed by, or supported by vMix
-(StudioCoast Pty Ltd) or the Open Media Transport project.
+Not affiliated with, endorsed by, or supported by vMix (StudioCoast Pty Ltd) or
+the Open Media Transport project.
