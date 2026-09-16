@@ -264,23 +264,13 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     ctx.separator(area.left, area.right, y);
     y += 10.0f;
 
-    // ---- announcing on this network ----
     if (ctx.checkbox(904, ui::rect(area.left, y, 460.0f, 24.0f),
                      &cfg.announce_manual_sources,
-                     L"Announce these on this network over mDNS")) {
+                     L"Announce direct sources over mDNS")) {
         dirty_ = true;
         announcer().refresh();
     }
-    y += 26.0f;
-    ctx.text_wrapped(D2D1::RectF(area.left + 28.0f, y, area.right, y + 34.0f),
-                     L"Makes them visible to vMix and anything else that browses for "
-                     L"OMT sources. No video passes through here: an announcement "
-                     L"points at the machine the source lives on.",
-                     Font::Small, theme().text_dim);
-    y += 40.0f;
-
-    ctx.separator(area.left, area.right, y);
-    y += 12.0f;
+    y += 32.0f;
 
     // ---- existing entries ----
     if (cfg.manual_sources.empty()) {
