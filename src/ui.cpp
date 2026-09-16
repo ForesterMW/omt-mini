@@ -355,6 +355,28 @@ bool Ctx::icon_button(Id id, const D2D1_RECT_F& r, Glyph g, const std::wstring&)
     return clicked;
 }
 
+void Ctx::lamp(const D2D1_RECT_F& r, const std::wstring& label, bool lit,
+               const D2D1_COLOR_F& colour) {
+    D2D1_COLOR_F fill = colour;
+    D2D1_COLOR_F edge = colour;
+    D2D1_COLOR_F fg;
+
+    if (lit) {
+        fg = theme().on_accent;
+    } else {
+        // Unlit reads as off rather than as disabled: the outline stays in the
+        // lamp's own colour so it is obvious which one would light.
+        fill.a = 0.10f;
+        edge.a = 0.35f;
+        fg = colour;
+        fg.a = 0.55f;
+    }
+
+    fill_rect(r, fill, metric::kRadius);
+    stroke_rect(r, edge, 1.0f, metric::kRadius);
+    text(r, label, Font::BodyBold, fg, Align::Center);
+}
+
 bool Ctx::checkbox(Id id, const D2D1_RECT_F& r, bool* value, const std::wstring& label) {
     const bool clicked = consume_click(id, r);
     if (clicked && value) *value = !*value;

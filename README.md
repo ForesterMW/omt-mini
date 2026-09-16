@@ -20,8 +20,11 @@ feeds at once as your machine will carry.
 - Colour conversion and scaling happen in a pixel shader, so a 1080p60 feed
   costs almost no CPU
 - Audio monitoring with per channel dBFS meters, volume and mute
-- Tally in both directions: see what the sender reports, and send PGM or PVW
-  back to it
+- Tally display: shows what the source reports across all of its receivers,
+  as PGM and PVW lamps and a coloured strip along the top of the window. OMT
+  Mini never asserts tally of its own. It is a monitor, and a monitor that
+  told a source it was on air just because someone opened a window on it
+  would be worse than useless
 - Statistics panel with frame rate, bitrate, decode time and dropped frames
 - Quality suggestion sent upstream to the sender
 - Low bandwidth mode, which pulls the sender's one eighth preview stream

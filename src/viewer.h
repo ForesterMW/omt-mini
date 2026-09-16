@@ -66,11 +66,13 @@ private:
     std::atomic<int64_t> dropped_{0};
     std::atomic<int64_t> codec_time_{0};
     std::atomic<int64_t> last_frame_ms_{0};
-    // Two different things, deliberately kept apart. agg_* is what the sender
-    // reports across every receiver connected to it, which is what drives a
-    // camera's tally lamp. my_* is what this viewer declares upstream.
+    // Tally as the sender reports it, across every receiver connected to it.
+    // OMT Mini never asserts tally of its own: it is a monitor, and a monitor
+    // that told a source it was on air simply because someone opened a window
+    // on it would be actively harmful.
     std::atomic<bool>  agg_pgm_{false};
     std::atomic<bool>  agg_pvw_{false};
+    std::atomic<bool>  tally_known_{false};
 
     std::mutex               meta_mutex_;
     std::deque<std::wstring> metadata_;
@@ -85,8 +87,6 @@ private:
     bool  muted_ = false;
     float volume_ = 1.0f;
     int   quality_index_ = 0;
-    bool  my_pgm_ = false;
-    bool  my_pvw_ = false;
     int64_t last_activity_ms_ = 0;
     bool  timer_running_ = false;
 

@@ -86,11 +86,6 @@ bool ViewerWindow::open() {
 }
 
 void ViewerWindow::on_closing() {
-    // Withdraw this viewer's tally before disconnecting, so a source is not
-    // left lit by a window that has gone.
-    if ((my_pgm_ || my_pvw_) && receiver_.is_open())
-        receiver_.set_tally(false, false);
-
     running_ = false;
     closed_  = true;
     if (thread_.joinable()) thread_.join();
@@ -140,6 +135,15 @@ void ViewerWindow::receive_loop() {
     int64_t last_stats_ms = 0;
 
     while (running_) {
+        // Polled every pass rather than with the once a second statistics, so
+        // an on air indication is not up to a second stale.
+        OMTTally tally{};
+        if (receiver_.get_tally(0, &tally)) {
+            agg_pgm_     = tally.program != 0;
+            agg_pvw_     = tally.preview != 0;
+            tally_known_ = true;
+        }
+
         OMTMediaFrame* f = receiver_.receive(types, 100);
         if (!f) {
             if (util::now_ms() - last_frame_ms_.load() > 1500) connected_ = false;
@@ -210,13 +214,6 @@ void ViewerWindow::receive_loop() {
                 }
             }
 
-            // Tally is polled here rather than from the UI thread so every
-            // libomt call for this receiver stays on one thread.
-            OMTTally tally{};
-            if (receiver_.get_tally(0, &tally)) {
-                agg_pgm_ = tally.program != 0;
-                agg_pvw_ = tally.preview != 0;
-            }
         }
         (void)last_stats_ms;
     }
@@ -401,7 +398,7 @@ void ViewerWindow::draw_top_bar(ui::Ctx& ctx, float alpha) {
              info, Font::Small, dim, Align::Right);
 
     // The strip shows the source's tally across every receiver connected to
-    // it, not just this one, which is what its camera lamp will be doing.
+    // it, which is what its lamp will be doing.
     const bool pgm = agg_pgm_.load();
     const bool pvw = agg_pvw_.load();
     if (pgm || pvw) {
@@ -412,7 +409,7 @@ void ViewerWindow::draw_top_bar(ui::Ctx& ctx, float alpha) {
         auto label = c;
         label.a = alpha;
         ctx.text(ui::rect(14.0f, kBarHeight - 4.0f, 220.0f, 16.0f),
-                 pgm ? L"ON AIR at the source" : L"previewed at the source",
+                 pgm ? L"ON AIR" : L"PREVIEW",
                  Font::Small, label, Align::Left, false);
     }
 }
@@ -448,19 +445,16 @@ void ViewerWindow::draw_bottom_bar(ui::Ctx& ctx, float alpha) {
              Font::Small, theme().text_dim);
     x += 52.0f;
 
-    // Tally controls, sent upstream to the source.
-    if (ctx.button(103, ui::rect(x, cy - 13.0f, 52.0f, 26.0f), L"PGM",
-                   my_pgm_ ? ButtonStyle::Danger : ButtonStyle::Normal)) {
-        my_pgm_ = !my_pgm_;
-        receiver_.set_tally(my_pvw_, my_pgm_);
+    // Tally, read only. Shown only once the source has actually reported it,
+    // so a sender that does not do tally leaves no dead lamps sitting there.
+    if (tally_known_.load()) {
+        ctx.lamp(ui::rect(x, cy - 13.0f, 52.0f, 26.0f), L"PGM",
+                 agg_pgm_.load(), theme().tally_pgm);
+        x += 58.0f;
+        ctx.lamp(ui::rect(x, cy - 13.0f, 52.0f, 26.0f), L"PVW",
+                 agg_pvw_.load(), theme().tally_pvw);
+        x += 58.0f;
     }
-    x += 58.0f;
-    if (ctx.button(104, ui::rect(x, cy - 13.0f, 52.0f, 26.0f), L"PVW",
-                   my_pvw_ ? ButtonStyle::Primary : ButtonStyle::Normal)) {
-        my_pvw_ = !my_pvw_;
-        receiver_.set_tally(my_pvw_, my_pgm_);
-    }
-    x += 58.0f;
 
     // Right hand cluster.
     float rx = ctx.width() - 12.0f - 28.0f;

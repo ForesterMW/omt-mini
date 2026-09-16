@@ -90,6 +90,10 @@ public:
     bool button(Id id, const D2D1_RECT_F& r, const std::wstring& label,
                 ButtonStyle style = ButtonStyle::Normal, bool enabled = true);
     bool icon_button(Id id, const D2D1_RECT_F& r, Glyph g, const std::wstring& tooltip = L"");
+    // A read only indicator lamp. Not clickable by design: this is a monitor
+    // reporting what a source says about itself, not a control.
+    void lamp(const D2D1_RECT_F& r, const std::wstring& label, bool lit,
+              const D2D1_COLOR_F& colour);
     bool toggle(Id id, const D2D1_RECT_F& r, bool* value, const std::wstring& label);
     bool checkbox(Id id, const D2D1_RECT_F& r, bool* value, const std::wstring& label);
     bool slider(Id id, const D2D1_RECT_F& r, float* value, float min_v, float max_v);
