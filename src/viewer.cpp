@@ -154,7 +154,13 @@ void ViewerWindow::receive_loop() {
 
         if (f->Type == OMTFrameType_Video) {
             {
-                std::lock_guard<std::mutex> lock(frame_mutex_);
+                // Device lock first, then the frame lock. The render thread
+                // takes them in that order, and uploading maps the shared
+                // context, which takes the device lock underneath. Taking them
+                // the other way round here deadlocked the viewer against its
+                // own painting the moment a frame arrived.
+                gfx::DeviceLock device_lock;
+                std::lock_guard<std::mutex> frame_lock(frame_mutex_);
                 if (texture_.upload(*f)) {
                     unsupported_format_ = false;
                 } else {
