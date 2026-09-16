@@ -249,21 +249,29 @@ void App::show_sources() {
     sources_window_->open_or_focus();
 }
 
-bool App::toggle_multiview_output() {
+void App::toggle_multiview_output() {
+    // Deferred, always. Stopping joins the compositing thread, which needs the
+    // device lock to release its target, and every button that calls this is
+    // drawn inside a paint that is already holding that lock.
+    if (hwnd_) PostMessageW(hwnd_, WM_OMT_MVOUTPUT, 0, 0);
+}
+
+void App::do_toggle_multiview_output() {
     if (multiview_output().running()) {
         multiview_output().stop();
         settings().multiview_output_enabled = false;
         settings().save();
-        return false;
-    }
-    if (!multiview_output().start()) {
+    } else if (multiview_output().start()) {
+        settings().multiview_output_enabled = true;
+        settings().save();
+    } else {
         MessageBoxW(nullptr, L"The multiview output could not start. See the log.",
                     L"OMT Mini", MB_OK | MB_ICONWARNING);
-        return false;
     }
-    settings().multiview_output_enabled = true;
-    settings().save();
-    return true;
+
+    if (sources_window_)   sources_window_->invalidate();
+    if (settings_window_)  settings_window_->invalidate();
+    if (multiview_window_) multiview_window_->invalidate();
 }
 
 void App::show_multiview() {
@@ -414,6 +422,10 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_OMT_INSTALL:
             do_install_update();
+            return 0;
+
+        case WM_OMT_MVOUTPUT:
+            do_toggle_multiview_output();
             return 0;
 
         case WM_OMT_UPDATE: {

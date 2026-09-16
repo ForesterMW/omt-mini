@@ -617,7 +617,10 @@ bool OffscreenTarget::create(int width, int height) {
     sd.Usage          = D3D11_USAGE_STAGING;
     sd.BindFlags      = 0;
     sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    if (FAILED(g_d3d->CreateTexture2D(&sd, nullptr, staging_.put()))) return false;
+    for (auto& staging : staging_)
+        if (FAILED(g_d3d->CreateTexture2D(&sd, nullptr, staging.put()))) return false;
+    staging_index_ = 0;
+    staging_primed_ = false;
 
     if (FAILED(g_d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
                                                  dc_.put())))
@@ -648,7 +651,9 @@ void OffscreenTarget::destroy() {
     bitmap_.reset();
     dc_.reset();
     rtv_.reset();
-    staging_.reset();
+    for (auto& staging : staging_) staging.reset();
+    staging_index_ = 0;
+    staging_primed_ = false;
     texture_.reset();
     width_ = height_ = 0;
 }
@@ -679,13 +684,25 @@ void OffscreenTarget::d2d_end() {
 }
 
 bool OffscreenTarget::read_back(std::vector<uint8_t>* pixels) {
-    if (!texture_ || !staging_ || !pixels) return false;
+    if (!texture_ || !staging_[0] || !staging_[1] || !pixels) return false;
     d2d_end();
 
-    g_ctx->CopyResource(staging_.get(), texture_.get());
+    // Copy into one, read from the other. The first frame has nothing to read
+    // yet, which is why the caller gets told there is no frame rather than
+    // being handed whatever was in the buffer.
+    const int write = staging_index_;
+    const int read  = 1 - staging_index_;
+    g_ctx->CopyResource(staging_[write].get(), texture_.get());
+    staging_index_ = read;
+
+    if (!staging_primed_) {
+        staging_primed_ = true;
+        return false;
+    }
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
-    if (FAILED(g_ctx->Map(staging_.get(), 0, D3D11_MAP_READ, 0, &mapped))) return false;
+    if (FAILED(g_ctx->Map(staging_[read].get(), 0, D3D11_MAP_READ, 0, &mapped)))
+        return false;
 
     const size_t row = static_cast<size_t>(width_) * 4;
     pixels->resize(row * static_cast<size_t>(height_));
@@ -694,7 +711,7 @@ bool OffscreenTarget::read_back(std::vector<uint8_t>* pixels) {
         std::memcpy(pixels->data() + static_cast<size_t>(y) * row,
                     src + static_cast<size_t>(y) * mapped.RowPitch, row);
 
-    g_ctx->Unmap(staging_.get(), 0);
+    g_ctx->Unmap(staging_[read].get(), 0);
     return true;
 }
 

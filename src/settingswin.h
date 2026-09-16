@@ -40,5 +40,6 @@ private:
     std::wstring manual_address_text_;
     std::wstring manual_name_text_;
     std::wstring manual_error_;
+    std::string  manual_editing_;   // address being changed, empty when adding
     std::wstring mv_name_text_;
 };

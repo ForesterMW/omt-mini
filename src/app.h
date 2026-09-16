@@ -28,7 +28,11 @@ public:
     void show_multiview();
     // Starts or stops the multiview as an OMT source. Independent of the
     // window, so it keeps sending with nothing open.
-    bool toggle_multiview_output();
+    //
+    // Safe to call from inside a window's paint: the work is deferred to the
+    // message loop, because stopping joins the compositing thread and a paint
+    // holds the device lock that thread needs to shut down.
+    void toggle_multiview_output();
     bool toggle_desktop_capture();
     bool toggle_webcam();
     // Requests the update install. Safe to call from inside a window's paint:
@@ -57,6 +61,7 @@ private:
     void show_tray_menu();
     void prune_viewers();
     void do_install_update();
+    void do_toggle_multiview_output();
 
     HINSTANCE    instance_ = nullptr;
     HWND         hwnd_ = nullptr;

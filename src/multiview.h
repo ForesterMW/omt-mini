@@ -37,7 +37,7 @@ class MultiviewTile {
 public:
     ~MultiviewTile() { stop(); }
 
-    void set_source(const std::string& address, bool preview, HWND notify);
+    void set_source(const std::string& address, bool preview);
     void stop();
 
     const std::string& address() const { return address_; }
@@ -53,8 +53,12 @@ public:
     bool draw_to(ID3D11RenderTargetView* target, const D2D1_RECT_F& dest);
 
 private:
-    void run(std::string address, bool preview, HWND notify);
+    void run(std::string address, bool preview);
+    void stop_locked();
 
+    // ---- 3. serialises set_source against stop, so two callers cannot both
+    // try to join the same receiver thread, which is undefined behaviour.
+    std::mutex         control_mutex_;
     std::string        address_;
     std::thread        thread_;
     std::atomic<bool>  running_{false};
@@ -78,6 +82,10 @@ public:
     void detach_window();
     void set_output_running(bool running);
     bool active() const { return window_attached_ || output_running_; }
+
+    // Where tiles post a repaint. Read live rather than captured, so a tile
+    // outliving its window does not post to a destroyed handle.
+    HWND notify() const { return notify_.load(); }
 
     int  layout() const { return layout_; }
     void set_layout(int index);
@@ -117,7 +125,7 @@ private:
     bool preview_ = true;
     bool window_attached_ = false;
     bool output_running_ = false;
-    HWND notify_ = nullptr;
+    std::atomic<HWND> notify_{nullptr};
 };
 
 MultiviewEngine& multiview_engine();
@@ -171,7 +179,8 @@ protected:
 private:
     void toggle_fullscreen();
     bool chrome_visible() const;
-    void draw_tile_overlay(ui::Ctx& ctx, size_t index, const D2D1_RECT_F& cell, float alpha);
+    void draw_tile_overlay(ui::Ctx& ctx, const MultiviewEngine::Snapshot& view,
+                           size_t index, const D2D1_RECT_F& cell, float alpha);
     void draw_toolbar(ui::Ctx& ctx, float alpha);
 
     // Engine changes join receiver threads, and a paint holds the device lock

@@ -85,16 +85,22 @@ std::vector<D2D1_RECT_F> multiview_cells(int layout_index, float width, float he
 }
 
 // ---- tile ---------------------------------------------------------------
-void MultiviewTile::set_source(const std::string& address, bool preview, HWND notify) {
-    stop();
+void MultiviewTile::set_source(const std::string& address, bool preview) {
+    std::lock_guard<std::mutex> control(control_mutex_);
+    stop_locked();
     address_ = address;
     if (address.empty()) return;
 
     running_ = true;
-    thread_ = std::thread([this, address, preview, notify] { run(address, preview, notify); });
+    thread_ = std::thread([this, address, preview] { run(address, preview); });
 }
 
 void MultiviewTile::stop() {
+    std::lock_guard<std::mutex> control(control_mutex_);
+    stop_locked();
+}
+
+void MultiviewTile::stop_locked() {
     running_ = false;
     if (thread_.joinable()) thread_.join();
     connected_ = false;
@@ -104,7 +110,7 @@ void MultiviewTile::stop() {
     texture_.release();
 }
 
-void MultiviewTile::run(std::string address, bool preview, HWND notify) {
+void MultiviewTile::run(std::string address, bool preview) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     const OMTReceiveFlags flags = preview ? OMTReceiveFlags_Preview : OMTReceiveFlags_None;
@@ -150,7 +156,10 @@ void MultiviewTile::run(std::string address, bool preview, HWND notify) {
         connected_ = true;
         last_frame_ms = util::now_ms();
 
-        if (notify) PostMessageW(notify, WM_OMT_FRAME, 0, 0);
+        // Read live: the window may have closed while the output kept this
+        // tile running, and posting to a destroyed handle is pointless.
+        if (HWND notify = multiview_engine().notify())
+            PostMessageW(notify, WM_OMT_FRAME, 0, 0);
     }
 
     receiver.close();
@@ -248,7 +257,7 @@ void MultiviewEngine::rebuild() {
 
             for (size_t i = 0; i < count; ++i) {
                 if (tiles_[i]->address() != assigned_[i])
-                    tiles_[i]->set_source(assigned_[i], preview_, notify_);
+                    tiles_[i]->set_source(assigned_[i], preview_);
             }
         }
     }
@@ -259,17 +268,15 @@ void MultiviewEngine::restart_tiles() {
     std::vector<std::shared_ptr<MultiviewTile>> current;
     std::vector<std::string> addresses;
     bool preview = false;
-    HWND notify = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         current   = tiles_;
         addresses = assigned_;
         preview   = preview_;
-        notify    = notify_;
     }
     // Outside the lock: set_source stops the old receiver, which joins a thread.
     for (size_t i = 0; i < current.size() && i < addresses.size(); ++i)
-        current[i]->set_source(addresses[i], preview, notify);
+        current[i]->set_source(addresses[i], preview);
 }
 
 MultiviewEngine::Snapshot MultiviewEngine::snapshot() const {
@@ -314,17 +321,15 @@ std::string MultiviewEngine::source_at(size_t index) const {
 void MultiviewEngine::set_source(size_t index, const std::string& address) {
     std::shared_ptr<MultiviewTile> tile;
     bool preview = false;
-    HWND notify = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (index >= assigned_.size() || index >= tiles_.size()) return;
         assigned_[index] = address;
         tile    = tiles_[index];
         preview = preview_;
-        notify  = notify_;
     }
     // Outside the lock: this joins the old receiver thread.
-    tile->set_source(address, preview, notify);
+    tile->set_source(address, preview);
     save();
 }
 
@@ -591,9 +596,8 @@ void MultiviewWindow::on_render_video() {
     }
 }
 
-void MultiviewWindow::draw_tile_overlay(ui::Ctx& ctx, size_t index, const D2D1_RECT_F& cell,
-                                        float alpha) {
-    const auto view = multiview_engine().snapshot();
+void MultiviewWindow::draw_tile_overlay(ui::Ctx& ctx, const MultiviewEngine::Snapshot& view,
+                                        size_t index, const D2D1_RECT_F& cell, float alpha) {
     if (index >= view.tiles.size() || !view.tiles[index]) return;
     auto& tile = view.tiles[index];
 
@@ -684,10 +688,9 @@ void MultiviewWindow::draw_toolbar(ui::Ctx& ctx, float alpha) {
     if (ctx.button(305, ui::rect(x, cy - 14.0f, 128.0f, 28.0f),
                    sending ? L"Sending" : L"Send as source",
                    sending ? ButtonStyle::Primary : ButtonStyle::Normal)) {
-        if (sending) multiview_output().stop();
-        else         multiview_output().start();
-        settings().multiview_output_enabled = !sending;
-        settings().save();
+        // Through the app, which defers it: stopping joins the compositing
+        // thread and this is running inside a paint holding the device lock.
+        App::instance().toggle_multiview_output();
     }
     x += 136.0f;
 
@@ -725,20 +728,25 @@ void MultiviewWindow::on_render(ui::Ctx& ctx) {
     // painting the window would cover every tile. The gaps come from
     // clear_colour().
     auto& engine = multiview_engine();
+    // Taken once: it copies a vector of shared pointers, which is not something
+    // to do per tile per frame.
+    const auto view = engine.snapshot();
 
     const bool visible_chrome = chrome_visible() || ctx.popup_open() || picking_ >= 0;
     const float alpha = ctx.animate(900, visible_chrome ? 1.0f : 0.0f, 10.0f);
 
-    const auto rects = multiview_cells(engine.layout(), ctx.width(), ctx.height(), kGap);
+    const auto rects = multiview_cells(view.layout, ctx.width(), ctx.height(), kGap);
     for (size_t i = 0; i < rects.size(); ++i)
-        draw_tile_overlay(ctx, i, rects[i], alpha);
+        draw_tile_overlay(ctx, view, i, rects[i], alpha);
 
     if (picking_ >= 0 && picking_ < static_cast<int>(rects.size())) {
         const auto sources = discovery().sources();
         std::vector<std::wstring> items{ L"None" };
         std::vector<std::string>  addresses{ "" };
         pick_index_ = 0;
-        const std::string current = engine.source_at(static_cast<size_t>(picking_));
+        const std::string current =
+            static_cast<size_t>(picking_) < view.assigned.size()
+                ? view.assigned[static_cast<size_t>(picking_)] : std::string();
         for (const auto& source : sources) {
             addresses.push_back(source.address);
             items.push_back(util::widen(source.name) + L"   (" +

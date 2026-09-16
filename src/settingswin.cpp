@@ -92,6 +92,9 @@ void SettingsWindow::open_or_focus(int tab) {
     active_tab_ = std::clamp(tab, 0, static_cast<int>(tab_labels().size()) - 1);
 
     const Settings& cfg = settings();
+    manual_editing_.clear();
+    manual_address_text_.clear();
+    manual_name_text_.clear();
     discovery_text_    = util::widen(cfg.discovery_server);
     port_start_text_   = std::to_wstring(cfg.port_start);
     port_end_text_     = std::to_wstring(cfg.port_end);
@@ -199,20 +202,36 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     ctx.text_field(902, D2D1::RectF(area.left + 428.0f, y, area.right - 92.0f, y + 28.0f),
                    &manual_name_text_, L"optional");
 
+    const bool editing = !manual_editing_.empty();
     const bool can_add = !util::trim(util::narrow(manual_address_text_)).empty();
-    if (ctx.button(903, ui::rect(area.right - 82.0f, y, 82.0f, 28.0f), L"Add",
-                   ButtonStyle::Primary, can_add) ||
+    if (ctx.button(903, ui::rect(area.right - 82.0f, y, 82.0f, 28.0f),
+                   editing ? L"Save" : L"Add", ButtonStyle::Primary, can_add) ||
         (can_add && ctx.input().key == VK_RETURN)) {
         const std::string normalized =
             omt::normalize_address(util::narrow(manual_address_text_));
         if (normalized.empty()) {
             manual_error_ = L"That address could not be understood.";
         } else {
-            const bool exists = std::any_of(
+            const bool clashes = std::any_of(
                 cfg.manual_sources.begin(), cfg.manual_sources.end(),
-                [&](const ManualSource& m) { return m.address == normalized; });
-            if (exists) {
+                [&](const ManualSource& m) {
+                    return m.address == normalized && m.address != manual_editing_;
+                });
+            if (clashes) {
                 manual_error_ = L"That address is already in the list.";
+            } else if (editing) {
+                for (auto& entry : cfg.manual_sources) {
+                    if (entry.address != manual_editing_) continue;
+                    entry.address = normalized;
+                    entry.name    = util::trim(util::narrow(manual_name_text_));
+                    break;
+                }
+                cfg.save();
+                discovery().set_manual_sources(cfg.manual_sources);
+                manual_editing_.clear();
+                manual_address_text_.clear();
+                manual_name_text_.clear();
+                manual_error_.clear();
             } else {
                 ManualSource ms;
                 ms.address = normalized;
@@ -234,8 +253,9 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                  manual_error_, Font::Small, theme().danger, Align::Left, false);
     } else {
         ctx.text(ui::rect(area.left + 120.0f, y, area.right - area.left - 120.0f, 18.0f),
-                 L"Port 6400 is assumed when none is given.", Font::Small,
-                 theme().text_dim, Align::Left, false);
+                 editing ? L"Editing an existing source."
+                         : L"Port 6400 is assumed when none is given.",
+                 Font::Small, theme().text_dim, Align::Left, false);
     }
     y += 26.0f;
 
@@ -293,11 +313,25 @@ void SettingsWindow::tab_sources(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                        L"Remove", ButtonStyle::Normal))
             remove_index = static_cast<int>(i);
 
+        if (ctx.button(id + 1, ui::rect(rowr.right - 160.0f, rowr.top + 5.0f, 62.0f, 26.0f),
+                       L"Edit", ButtonStyle::Normal)) {
+            manual_editing_      = m.address;
+            manual_address_text_ = util::widen(m.address);
+            manual_name_text_    = util::widen(m.name);
+            manual_error_.clear();
+            invalidate();
+        }
+
         ry += row_h;
     }
     ctx.end_scroll();
 
     if (remove_index >= 0) {
+        if (cfg.manual_sources[remove_index].address == manual_editing_) {
+            manual_editing_.clear();
+            manual_address_text_.clear();
+            manual_name_text_.clear();
+        }
         cfg.manual_sources.erase(cfg.manual_sources.begin() + remove_index);
         cfg.save();
         discovery().set_manual_sources(cfg.manual_sources);

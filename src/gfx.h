@@ -172,7 +172,13 @@ public:
 
 private:
     ComPtr<ID3D11Texture2D>        texture_;
-    ComPtr<ID3D11Texture2D>        staging_;
+    // Two staging copies, read one behind the one just written. Mapping the
+    // frame that was only just copied would block until the GPU had finished
+    // with it, and that stall would be held under the device lock, which would
+    // show up as stutter in every viewer while the output is running.
+    ComPtr<ID3D11Texture2D>        staging_[2];
+    int                            staging_index_ = 0;
+    bool                           staging_primed_ = false;
     ComPtr<ID3D11RenderTargetView> rtv_;
     ComPtr<ID2D1DeviceContext>     dc_;
     ComPtr<ID2D1Bitmap1>           bitmap_;

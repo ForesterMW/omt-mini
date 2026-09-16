@@ -35,4 +35,6 @@ private:
     std::wstring toast_;
     int64_t      toast_until_ms_ = 0;
     bool         scan_pending_ = false;   // a finished scan waiting to be taken
+    // Set while the panel is changing an existing entry rather than adding one.
+    std::string  editing_address_;
 };

@@ -6,7 +6,7 @@ Media Transport contributors.
 
 Find sources on your network, open as many live viewers as you want, share a
 screen as a source, and appear as a webcam in other applications. All from one
-tray icon, in a 896 KB executable that sits at effectively zero CPU when idle.
+tray icon, in a 902 KB executable that sits at effectively zero CPU when idle.
 
 If you have used NDI Tools, this covers the same ground as Studio Monitor,
 Screen Capture and Webcam Input, except it is one icon instead of several
@@ -189,9 +189,13 @@ and it is taken literally with no scanning.
 Entries appear in the source list and the tray menu beside discovered ones, and
 can be viewed or used as the webcam source in exactly the same way.
 
-To remove one, click it in the source list to select it and press Remove. Only
-sources you added by hand can be removed: a discovered one is not yours to
-delete, and would simply come back.
+Click an entry in the source list to select it, and it offers **Edit** and
+**Remove**. Editing loads it back into the add panel, where the address is then
+taken exactly as typed rather than walked. Both are also in
+**Settings > Sources**.
+
+Only sources you added by hand can be edited or removed: a discovered one is
+not yours to change, and would simply come back.
 
 They are tagged `direct` and carry a status dot, checked every eight seconds
 with a plain TCP connect, which costs far less than standing up a receiver to

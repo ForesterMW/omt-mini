@@ -115,6 +115,9 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
     if (ctx.icon_button(13, ui::rect(ctx.width() - 148.0f, 16.0f, 28.0f, 28.0f),
                         adding_ ? ui::Ctx::Glyph::Close : ui::Ctx::Glyph::Plus)) {
         adding_ = !adding_;
+        editing_address_.clear();
+        add_address_text_.clear();
+        add_name_text_.clear();
         add_error_.clear();
         invalidate();
     }
@@ -200,6 +203,44 @@ void SourcesWindow::commit_add() {
     Settings& cfg = settings();
     const std::string typed = util::trim(util::narrow(add_address_text_));
 
+    // Changing an existing entry is taken literally: someone editing an address
+    // means that address, not a fresh walk of the machine.
+    if (!editing_address_.empty()) {
+        const std::string normalized = omt::normalize_address(typed);
+        if (normalized.empty()) {
+            add_error_ = L"That address could not be understood.";
+            return;
+        }
+        const bool clashes = std::any_of(
+            cfg.manual_sources.begin(), cfg.manual_sources.end(),
+            [&](const ManualSource& m) {
+                return m.address == normalized && m.address != editing_address_;
+            });
+        if (clashes) {
+            add_error_ = L"Another entry already uses that address.";
+            return;
+        }
+
+        for (auto& entry : cfg.manual_sources) {
+            if (entry.address != editing_address_) continue;
+            entry.address = normalized;
+            entry.name    = util::trim(util::narrow(add_name_text_));
+            break;
+        }
+        cfg.save();
+        discovery().set_manual_sources(cfg.manual_sources);
+
+        if (selected_address_ == editing_address_) selected_address_ = normalized;
+        editing_address_.clear();
+        add_address_text_.clear();
+        add_name_text_.clear();
+        add_error_.clear();
+        adding_ = false;
+        toast_ = L"Source updated";
+        toast_until_ms_ = util::now_ms() + 2500;
+        return;
+    }
+
     // No port given means the machine probably has more than one sender on it,
     // so walk the range rather than assuming only the first.
     if (!typed.empty() && !omt::has_explicit_port(typed) && add_error_.empty()) {
@@ -278,9 +319,10 @@ float SourcesWindow::draw_add_panel(ui::Ctx& ctx, float top) {
                                    ctx.width() - 176.0f, y + 28.0f),
                    &add_name_text_, L"name (optional)");
 
+    const bool editing = !editing_address_.empty();
     const bool can_add = !util::trim(util::narrow(add_address_text_)).empty();
-    if (ctx.button(32, ui::rect(ctx.width() - 168.0f, y, 72.0f, 28.0f), L"Add",
-                   ButtonStyle::Primary, can_add) ||
+    if (ctx.button(32, ui::rect(ctx.width() - 168.0f, y, 72.0f, 28.0f),
+                   editing ? L"Save" : L"Add", ButtonStyle::Primary, can_add) ||
         (can_add && ctx.input().key == VK_RETURN)) {
         commit_add();
         invalidate();
@@ -289,13 +331,16 @@ float SourcesWindow::draw_add_panel(ui::Ctx& ctx, float top) {
                    ButtonStyle::Normal) ||
         ctx.input().key == VK_ESCAPE) {
         adding_ = false;
+        editing_address_.clear();
         add_error_.clear();
         invalidate();
     }
 
     if (add_error_.empty()) {
         ctx.text(ui::rect(16.0f, y + 30.0f, ctx.width() - 32.0f, 18.0f),
-                 L"Leave the port off and OMT Mini finds every sender on that machine.",
+                 editing
+                     ? L"Editing an existing source. The address is used exactly as typed."
+                     : L"Leave the port off and OMT Mini finds every sender on that machine.",
                  Font::Small, theme().text_dim, Align::Left, false);
     } else {
         ctx.text_wrapped(D2D1::RectF(16.0f, y + 30.0f, ctx.width() - 32.0f, y + 74.0f),
@@ -320,6 +365,7 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
 
     scroll_.content_height = cached_.size() * kRowHeight + 8.0f;
     std::string remove_address;
+    std::string edit_address;
     ctx.begin_scroll(1, area, &scroll_);
 
     float y = area.top + 4.0f;
@@ -335,7 +381,9 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
             continue;
         }
 
-        const auto id = static_cast<ui::Id>(100 + i * 4);
+        // Stride of eight: a row now claims id+0 through id+4, and a stride of
+        // four would put every row's last widget on the next row's first.
+        const auto id = static_cast<ui::Id>(100 + i * 8);
         const bool over = ctx.hovered(rowr);
         const bool selected = !selected_address_.empty() && selected_address_ == s.address;
         const float t = ctx.animate(id, (over || selected) ? 1.0f : 0.0f);
@@ -343,7 +391,7 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         // Selecting a row is what reveals Remove, so the whole row is a click
         // target except where the action buttons sit.
         const D2D1_RECT_F actions =
-            D2D1::RectF(rowr.right - 270.0f, rowr.top, rowr.right, rowr.bottom);
+            D2D1::RectF(rowr.right - 348.0f, rowr.top, rowr.right, rowr.bottom);
         if (!ctx.hovered(actions) && ctx.clicked_area(id, rowr)) {
             selected_address_ = selected ? std::string() : s.address;
             invalidate();
@@ -376,7 +424,7 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         // not they are showing, so nothing jumps when the pointer arrives.
         float tag_x = text_left + std::min(230.0f, ctx.text_width(name, Font::BodyBold))
                     + 10.0f;
-        const float tag_limit = rowr.right - 274.0f;
+        const float tag_limit = rowr.right - 352.0f;
         const float tag_y = rowr.top + 9.0f;
 
         auto add_tag = [&](const std::wstring& label, const D2D1_COLOR_F& colour) {
@@ -435,12 +483,18 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                 App::instance().toggle_webcam();
                 invalidate();
             }
-            // Only a source that was added by hand can be removed. A discovered
-            // one is not ours to delete: it would simply come back.
+            // Only a source that was added by hand can be edited or removed. A
+            // discovered one is not ours to change: it would simply come back.
             if (s.is_manual && selected) {
                 if (ctx.button(id + 3,
-                               ui::rect(rowr.right - bw - 12.0f - 96.0f - 88.0f,
-                                        rowr.top + 13.0f, 80.0f, 26.0f),
+                               ui::rect(rowr.right - bw - 12.0f - 96.0f - 68.0f,
+                                        rowr.top + 13.0f, 60.0f, 26.0f),
+                               L"Edit", ButtonStyle::Normal)) {
+                    edit_address = s.address;
+                }
+                if (ctx.button(id + 4,
+                               ui::rect(rowr.right - bw - 12.0f - 96.0f - 68.0f - 84.0f,
+                                        rowr.top + 13.0f, 76.0f, 26.0f),
                                L"Remove", ButtonStyle::Danger)) {
                     remove_address = s.address;
                 }
@@ -450,6 +504,20 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     }
 
     ctx.end_scroll();
+
+    if (!edit_address.empty()) {
+        const Settings& cfg = settings();
+        for (const auto& entry : cfg.manual_sources) {
+            if (entry.address != edit_address) continue;
+            editing_address_  = entry.address;
+            add_address_text_ = util::widen(entry.address);
+            add_name_text_    = util::widen(entry.name);
+            add_error_.clear();
+            adding_ = true;
+            break;
+        }
+        invalidate();
+    }
 
     if (!remove_address.empty()) {
         Settings& cfg = settings();
