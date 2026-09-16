@@ -155,15 +155,32 @@ void SourcesWindow::draw_list(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         ctx.text(ui::rect(text_left, rowr.top + 8.0f, 260.0f, 20.0f),
                  name, Font::BodyBold, theme().text, Align::Left, false);
 
-        // Tag sits immediately after the name, clear of the hover actions.
-        const float name_end = text_left + std::min(260.0f,
-                                                    ctx.text_width(name, Font::BodyBold));
-        if (s.is_manual) {
-            ctx.badge(name_end + 10.0f, rowr.top + 9.0f, 17.0f, L"direct",
-                      theme().badge_direct);
-        } else if (s.is_local) {
-            ctx.badge(name_end + 10.0f, rowr.top + 9.0f, 17.0f, L"this machine",
-                      theme().accent_hi);
+        // Tags sit after the name. The hover actions are given room whether or
+        // not they are showing, so nothing jumps when the pointer arrives.
+        float tag_x = text_left + std::min(230.0f, ctx.text_width(name, Font::BodyBold))
+                    + 10.0f;
+        const float tag_limit = rowr.right - 210.0f;
+        const float tag_y = rowr.top + 9.0f;
+
+        auto add_tag = [&](const std::wstring& label, const D2D1_COLOR_F& colour) {
+            if (label.empty()) return;
+            const float width = ctx.text_width(label, Font::Small) + 14.0f;
+            if (tag_x + width > tag_limit) return;
+            tag_x += ctx.badge(tag_x, tag_y, 17.0f, label, colour) + 6.0f;
+        };
+
+        if (s.is_manual)     add_tag(L"direct", theme().badge_direct);
+        else if (s.is_local) add_tag(L"this machine", theme().accent_hi);
+
+        // What the sender says it is. Green for another OMT Mini, so a feed
+        // that will behave exactly like this one is obvious at a glance.
+        if (s.is_omt_mini) {
+            add_tag(L"OMT Mini", theme().ok);
+        } else if (!s.manufacturer.empty() || !s.product.empty()) {
+            std::wstring maker =
+                util::widen(!s.manufacturer.empty() ? s.manufacturer : s.product);
+            if (maker.size() > 20) maker = maker.substr(0, 19) + L"\u2026";
+            add_tag(maker, theme().text_dim);
         }
 
         std::wstring sub = s.is_manual ? util::widen(s.address) : util::widen(s.host);

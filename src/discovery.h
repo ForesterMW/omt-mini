@@ -10,6 +10,7 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <map>
 
 struct ManualSource;
 
@@ -26,6 +27,12 @@ struct DiscoveredSource {
     bool        is_local = false;   // advertised by this machine
     bool        is_manual = false;  // added by hand, not discovered
     SourceStatus status = SourceStatus::Online;
+
+    // Reported by the sender itself through OMTSenderInfo, which is the
+    // mechanism OMT already provides for this. Empty until identified.
+    std::string product;
+    std::string manufacturer;
+    bool        is_omt_mini = false;
 };
 
 class Discovery {
@@ -60,6 +67,8 @@ private:
     mutable std::mutex            manual_mutex_;
     std::vector<DiscoveredSource> manual_;
     std::thread                   probe_thread_;
+    mutable std::mutex            identity_mutex_;
+    std::map<std::string, DiscoveredSource> identity_;
     std::atomic<bool>             status_changed_{false};
     std::atomic<bool>             probe_now_{false};
 };

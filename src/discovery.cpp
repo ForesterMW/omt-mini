@@ -54,6 +54,32 @@ bool tcp_probe(const std::string& host, const std::string& port, int timeout_ms)
     return reachable;
 }
 
+// Reads the product name a sender reports about itself.
+//
+// OMT already carries this: a sender fills in OMTSenderInfo and any receiver
+// can read it back. The catch is that it is only valid while connected, so it
+// cannot come from discovery alone. A metadata only receiver is the cheapest
+// way to ask: no video or audio is requested, so it costs the sender one short
+// connection and nothing else, and the answer is cached for good.
+bool identify_sender(const std::string& address, std::string* product,
+                     std::string* manufacturer) {
+    omt::Receiver receiver;
+    if (!receiver.open(address, OMTFrameType_Metadata,
+                       OMTPreferredVideoFormat_UYVY, OMTReceiveFlags_None))
+        return false;
+
+    OMTSenderInfo info{};
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        if (receiver.sender_info(&info)) {
+            if (product)      *product = info.ProductName;
+            if (manufacturer) *manufacturer = info.Manufacturer;
+            return true;
+        }
+        Sleep(100);
+    }
+    return false;
+}
+
 std::string this_hostname() {
     wchar_t buf[256] = {};
     DWORD n = ARRAYSIZE(buf);
@@ -155,6 +181,38 @@ void Discovery::probe_run() {
             targets = manual_;
         }
 
+        // ---- identify anything newly seen ----
+        if (settings().identify_sources && omt::loaded()) {
+            std::vector<std::string> unknown;
+            {
+                std::lock_guard<std::mutex> sources_lock(mutex_);
+                std::lock_guard<std::mutex> identity_lock(identity_mutex_);
+                for (const auto& source : sources_) {
+                    if (identity_.count(source.address)) continue;
+                    // An added source that is not answering cannot be asked.
+                    if (source.is_manual && source.status == SourceStatus::Offline) continue;
+                    unknown.push_back(source.address);
+                }
+            }
+
+            for (const auto& address : unknown) {
+                if (!running_) break;
+                DiscoveredSource identity;
+                identity.address = address;
+                if (identify_sender(address, &identity.product, &identity.manufacturer)) {
+                    identity.is_omt_mini = util::iequals(identity.manufacturer, "OMT Mini");
+                    util::logf("discovery: %s identifies as '%s' by '%s'", address.c_str(),
+                               identity.product.c_str(), identity.manufacturer.c_str());
+                }
+                {
+                    std::lock_guard<std::mutex> lock(identity_mutex_);
+                    identity_[address] = identity;
+                }
+                status_changed_ = true;
+                wake_ = true;
+            }
+        }
+
         for (const auto& target : targets) {
             if (!running_) break;
             std::string host, port;
@@ -175,6 +233,19 @@ void Discovery::probe_run() {
                                status == SourceStatus::Online ? "online" : "offline");
                 }
                 break;
+            }
+        }
+
+        // Drop identities for sources that have gone, so a host that comes back
+        // as something else is not remembered wrongly.
+        {
+            std::lock_guard<std::mutex> sources_lock(mutex_);
+            std::lock_guard<std::mutex> identity_lock(identity_mutex_);
+            for (auto it = identity_.begin(); it != identity_.end();) {
+                const bool still_listed = std::any_of(
+                    sources_.begin(), sources_.end(),
+                    [&](const DiscoveredSource& s) { return s.address == it->first; });
+                it = still_listed ? std::next(it) : identity_.erase(it);
             }
         }
 
@@ -249,6 +320,18 @@ void Discovery::run() {
                         next.begin(), next.end(),
                         [&](const DiscoveredSource& o) { return o.address == m.address; });
                     if (!duplicate) next.push_back(m);
+                }
+            }
+
+            // Attach whatever each source has told us about itself.
+            {
+                std::lock_guard<std::mutex> lock(identity_mutex_);
+                for (auto& entry : next) {
+                    auto it = identity_.find(entry.address);
+                    if (it == identity_.end()) continue;
+                    entry.product      = it->second.product;
+                    entry.manufacturer = it->second.manufacturer;
+                    entry.is_omt_mini  = it->second.is_omt_mini;
                 }
             }
 

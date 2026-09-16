@@ -100,6 +100,7 @@ void Settings::load() {
     webcam_fps              = clampi(get_int(kv, "webcam_fps", webcam_fps), 1, 120);
     webcam_autostart        = get_bool(kv, "webcam_autostart", webcam_autostart);
 
+    identify_sources        = get_bool(kv, "identify_sources", identify_sources);
     check_updates_on_launch = get_bool(kv, "check_updates_on_launch", check_updates_on_launch);
 
     // Manual sources are stored as numbered keys so an address can contain
@@ -170,6 +171,8 @@ void Settings::save() const {
     puti("webcam_height", webcam_height);
     puti("webcam_fps", webcam_fps);
     putb("webcam_autostart", webcam_autostart);
+
+    putb("identify_sources", identify_sources);
 
     out += "\r\n# Updates\r\n";
     putb("check_updates_on_launch", check_updates_on_launch);

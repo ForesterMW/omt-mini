@@ -150,6 +150,12 @@ void SettingsWindow::tab_general(ui::Ctx& ctx, const D2D1_RECT_F& area) {
             &cfg.notify_on_source_change))
         dirty_ = true;
 
+    if (row(204, L"Identify sources",
+            L"Briefly connects to each new source, asking for metadata only, to "
+            L"read the product name it reports. Once per source.",
+            &cfg.identify_sources))
+        dirty_ = true;
+
     ctx.separator(area.left, area.right, y);
     y += 16.0f;
 

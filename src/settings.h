@@ -61,6 +61,11 @@ struct Settings {
     // libomt accepts in place of a discovered name.
     std::vector<ManualSource> manual_sources;
 
+    // Briefly connects to each newly seen source, requesting metadata only, to
+    // read the product name it reports. Costs the sender one short connection
+    // per source, once, and nothing after that.
+    bool        identify_sources = true;
+
     // ---- Updates ----
     // Checking is a read only call to the public GitHub API. Installing is
     // never automatic and always needs an explicit press.

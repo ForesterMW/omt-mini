@@ -387,6 +387,24 @@ void ViewerWindow::draw_top_bar(ui::Ctx& ctx, float alpha) {
     ctx.text(D2D1::RectF(14.0f, 0, ctx.width() * 0.6f, kBarHeight), title_,
              Font::BodyBold, text);
 
+    // The sender identifies itself through OMTSenderInfo, which is only valid
+    // while connected, so this is free here in a way it can never be in the
+    // source list.
+    std::wstring product;
+    {
+        std::lock_guard<std::mutex> lock(meta_mutex_);
+        product = sender_product_;
+    }
+    if (!product.empty()) {
+        const bool mini = product.rfind(L"OMT Mini", 0) == 0;
+        auto colour = mini ? theme().ok : theme().text_dim;
+        colour.a *= alpha;
+        const float name_end = 14.0f + std::min(ctx.width() * 0.4f,
+                                                ctx.text_width(title_, Font::BodyBold));
+        ctx.badge(name_end + 10.0f, kBarHeight * 0.5f - 8.5f, 17.0f,
+                  mini ? L"OMT Mini" : product, colour);
+    }
+
     const int w = frame_w_, h = frame_h_;
     std::wstring info;
     if (w > 0 && h > 0) {

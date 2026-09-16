@@ -41,7 +41,8 @@ feed into Teams, Zoom, OBS or anything else that accepts a webcam.
 
 **The source list** tags what it finds. Anything advertised by the machine you
 are sitting at is marked `this machine`, so it is obvious at a glance which
-feeds are not crossing the network.
+feeds are not crossing the network, and every source carries a tag saying what
+it reports itself to be. Another OMT Mini shows up in green.
 
 **Sources added by hand.** Senders that automatic discovery cannot see can be
 addressed directly, the same idea as Access Manager in NDI Tools. They are
@@ -124,6 +125,24 @@ Each entry points at one sender. To enumerate every source on a remote host
 instead, run an
 [OMT Discovery Server](https://github.com/openmediatransport/OMTDiscoveryServer)
 and set its address under Settings > Network.
+
+### What a source says it is
+
+OMT senders describe themselves through `OMTSenderInfo`, a product name, a
+manufacturer and a version. The source list shows that as a tag beside the
+name, in grey for anything else and **green for another OMT Mini**.
+
+That information only travels once a receiver is attached, so it cannot come
+from discovery on its own. OMT Mini asks by opening a **metadata only**
+receiver: no video or audio is requested, so it costs the sender one short
+connection and nothing else, and the answer is remembered for as long as the
+source stays on the network. It happens once per source, not on a timer.
+
+Turn it off under Settings > General if you would rather nothing connected to a
+source until you open it.
+
+A viewer shows the same tag without any of that, because it is already
+connected.
 
 ### Updates
 
