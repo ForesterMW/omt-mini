@@ -38,6 +38,7 @@ HFONT g_title_font = nullptr;
 HWND  g_status = nullptr;
 HWND  g_progress = nullptr;
 bool  g_busy = false;
+bool  g_close_requested = false;
 
 std::wstring install_dir() {
     PWSTR local = nullptr;
@@ -77,6 +78,17 @@ std::wstring desktop_shortcut() {
 
 void set_status(const wchar_t* text) {
     if (g_status) SetWindowTextW(g_status, text);
+}
+
+// Extraction runs on the UI thread, so without this the window stops painting
+// and Windows marks it Not Responding part way through the install. The
+// buttons are disabled while this runs, so re-entering the loop is safe.
+void pump_messages() {
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
 }
 
 bool create_directories(const std::wstring& path) {
@@ -215,7 +227,9 @@ bool extract_entry(const std::wstring& self, const PayloadEntry& entry,
     std::vector<char> buffer(256 * 1024);
     uint64_t remaining = entry.size;
     bool ok = true;
+    int chunk = 0;
     while (remaining > 0) {
+        if ((++chunk % 8) == 0) pump_messages();
         const DWORD want = static_cast<DWORD>(
             remaining < buffer.size() ? remaining : buffer.size());
         DWORD got = 0, put = 0;
@@ -255,10 +269,13 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
     // over a copy that is shutting down threads, so wait for the window to go
     // rather than guessing at a fixed delay.
     set_status(L"Closing the running copy...");
+    pump_messages();
     if (HWND running = FindWindowW(L"OMTMiniTray", nullptr)) {
         PostMessageW(running, WM_CLOSE, 0, 0);
-        for (int i = 0; i < 100 && FindWindowW(L"OMTMiniTray", nullptr); ++i)
+        for (int i = 0; i < 100 && FindWindowW(L"OMTMiniTray", nullptr); ++i) {
             Sleep(100);
+            pump_messages();
+        }
         Sleep(300);
     }
 
@@ -271,6 +288,7 @@ bool do_install(HWND window, bool startup, bool register_vcam, bool desktop_link
         std::wstring status = L"Installing " + entries[i].name + L"...";
         set_status(status.c_str());
         if (g_progress) SendMessageW(g_progress, PBM_SETPOS, static_cast<WPARAM>(i + 1), 0);
+        pump_messages();
 
         if (!extract_entry(self, entries[i], dir)) {
             std::wstring message = L"Could not write " + entries[i].name +
@@ -472,13 +490,19 @@ LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     SendMessageW(GetDlgItem(hwnd, kIdDesktopShortcut), BM_GETCHECK, 0, 0) ==
                     BST_CHECKED;
 
-                if (do_install(hwnd, startup, vcam, desk)) {
+                const bool installed = do_install(hwnd, startup, vcam, desk);
+
+                // Clear this before anything else: WM_CLOSE is ignored while
+                // it is set, and leaving it set on the way out made the window
+                // impossible to close except from Task Manager.
+                g_busy = false;
+
+                if (installed) {
                     const std::wstring exe = install_dir() + L"\\" + kExeName;
                     ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, nullptr,
                                   SW_SHOWNORMAL);
                     PostMessageW(hwnd, WM_CLOSE, 0, 0);
                 } else {
-                    g_busy = false;
                     EnableWindow(GetDlgItem(hwnd, kIdInstall), TRUE);
                     EnableWindow(GetDlgItem(hwnd, kIdCancel), TRUE);
                     set_status(L"Installation did not complete.");
@@ -489,7 +513,13 @@ LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_CLOSE:
-            if (g_busy) return 0;
+            // Refuse only while files are actually being written, and only
+            // once, so a stuck state can never trap the user in the dialog.
+            if (g_busy && !g_close_requested) {
+                g_close_requested = true;
+                set_status(L"Finishing the current step, press close again to abort...");
+                return 0;
+            }
             DestroyWindow(hwnd);
             return 0;
 

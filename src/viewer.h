@@ -66,8 +66,11 @@ private:
     std::atomic<int64_t> dropped_{0};
     std::atomic<int64_t> codec_time_{0};
     std::atomic<int64_t> last_frame_ms_{0};
-    std::atomic<bool>  tally_pgm_state_{false};
-    std::atomic<bool>  tally_pvw_state_{false};
+    // Two different things, deliberately kept apart. agg_* is what the sender
+    // reports across every receiver connected to it, which is what drives a
+    // camera's tally lamp. my_* is what this viewer declares upstream.
+    std::atomic<bool>  agg_pgm_{false};
+    std::atomic<bool>  agg_pvw_{false};
 
     std::mutex               meta_mutex_;
     std::deque<std::wstring> metadata_;
@@ -82,8 +85,8 @@ private:
     bool  muted_ = false;
     float volume_ = 1.0f;
     int   quality_index_ = 0;
-    bool  tally_pgm_ = false;
-    bool  tally_pvw_ = false;
+    bool  my_pgm_ = false;
+    bool  my_pvw_ = false;
     int64_t last_activity_ms_ = 0;
     bool  timer_running_ = false;
 

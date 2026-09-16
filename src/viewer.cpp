@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 using gfx::theme;
 using ui::Align;
@@ -85,6 +86,11 @@ bool ViewerWindow::open() {
 }
 
 void ViewerWindow::on_closing() {
+    // Withdraw this viewer's tally before disconnecting, so a source is not
+    // left lit by a window that has gone.
+    if ((my_pgm_ || my_pvw_) && receiver_.is_open())
+        receiver_.set_tally(false, false);
+
     running_ = false;
     closed_  = true;
     if (thread_.joinable()) thread_.join();
@@ -195,18 +201,21 @@ void ViewerWindow::receive_loop() {
             window_frames = 0;
             window_start = now;
 
-            if (sender_product_.empty()) {
-                OMTSenderInfo info{};
-                if (receiver_.sender_info(&info))
-                    sender_product_ = util::widen(info.ProductName);
+            {
+                std::lock_guard<std::mutex> lock(meta_mutex_);
+                if (sender_product_.empty()) {
+                    OMTSenderInfo info{};
+                    if (receiver_.sender_info(&info))
+                        sender_product_ = util::widen(info.ProductName);
+                }
             }
 
             // Tally is polled here rather than from the UI thread so every
             // libomt call for this receiver stays on one thread.
             OMTTally tally{};
             if (receiver_.get_tally(0, &tally)) {
-                tally_pgm_state_ = tally.program != 0;
-                tally_pvw_state_ = tally.preview != 0;
+                agg_pgm_ = tally.program != 0;
+                agg_pvw_ = tally.preview != 0;
             }
         }
         (void)last_stats_ms;
@@ -391,11 +400,20 @@ void ViewerWindow::draw_top_bar(ui::Ctx& ctx, float alpha) {
     ctx.text(D2D1::RectF(ctx.width() * 0.45f, 0, ctx.width() - 14.0f, kBarHeight),
              info, Font::Small, dim, Align::Right);
 
-    // Tally lamps across the top edge, mirroring what the sender reports.
-    if (tally_pgm_ || tally_pvw_) {
-        auto c = tally_pgm_ ? theme().tally_pgm : theme().tally_pvw;
+    // The strip shows the source's tally across every receiver connected to
+    // it, not just this one, which is what its camera lamp will be doing.
+    const bool pgm = agg_pgm_.load();
+    const bool pvw = agg_pvw_.load();
+    if (pgm || pvw) {
+        auto c = pgm ? theme().tally_pgm : theme().tally_pvw;
         c.a *= alpha;
         ctx.fill_rect(D2D1::RectF(0, 0, ctx.width(), 3.0f), c);
+
+        auto label = c;
+        label.a = alpha;
+        ctx.text(ui::rect(14.0f, kBarHeight - 4.0f, 220.0f, 16.0f),
+                 pgm ? L"ON AIR at the source" : L"previewed at the source",
+                 Font::Small, label, Align::Left, false);
     }
 }
 
@@ -432,15 +450,15 @@ void ViewerWindow::draw_bottom_bar(ui::Ctx& ctx, float alpha) {
 
     // Tally controls, sent upstream to the source.
     if (ctx.button(103, ui::rect(x, cy - 13.0f, 52.0f, 26.0f), L"PGM",
-                   tally_pgm_ ? ButtonStyle::Danger : ButtonStyle::Normal)) {
-        tally_pgm_ = !tally_pgm_;
-        receiver_.set_tally(tally_pvw_, tally_pgm_);
+                   my_pgm_ ? ButtonStyle::Danger : ButtonStyle::Normal)) {
+        my_pgm_ = !my_pgm_;
+        receiver_.set_tally(my_pvw_, my_pgm_);
     }
     x += 58.0f;
     if (ctx.button(104, ui::rect(x, cy - 13.0f, 52.0f, 26.0f), L"PVW",
-                   tally_pvw_ ? ButtonStyle::Primary : ButtonStyle::Normal)) {
-        tally_pvw_ = !tally_pvw_;
-        receiver_.set_tally(tally_pvw_, tally_pgm_);
+                   my_pvw_ ? ButtonStyle::Primary : ButtonStyle::Normal)) {
+        my_pvw_ = !my_pvw_;
+        receiver_.set_tally(my_pvw_, my_pgm_);
     }
     x += 58.0f;
 
@@ -517,35 +535,65 @@ void ViewerWindow::draw_meters(ui::Ctx& ctx) {
 void ViewerWindow::draw_stats(ui::Ctx& ctx) {
     if (!show_stats_) return;
 
-    const float w = 250.0f;
-    const float h = 186.0f;
-    const D2D1_RECT_F panel = D2D1::RectF(14.0f, kBarHeight + 14.0f,
-                                          14.0f + w, kBarHeight + 14.0f + h);
+    struct Row { const wchar_t* label; std::wstring value; };
+    std::vector<Row> rows;
+
+    rows.push_back({ L"Source", title_ });
+    {
+        std::lock_guard<std::mutex> lock(meta_mutex_);
+        if (!sender_product_.empty()) rows.push_back({ L"Sender", sender_product_ });
+    }
+    rows.push_back({ L"Resolution", fmt(L"%d x %d%s", frame_w_.load(), frame_h_.load(),
+                                        interlaced_ ? L"i" : L"p") });
+    rows.push_back({ L"Frame rate", fmt(L"%.2f fps", fps_.load()) });
+    rows.push_back({ L"Codec",
+                     util::widen(omt::codec_name(static_cast<OMTCodec>(codec_.load()))) });
+    rows.push_back({ L"Bitrate",    fmt(L"%.2f Mb/s", mbps_.load()) });
+    rows.push_back({ L"Frames",     fmt(L"%lld", static_cast<long long>(frames_.load())) });
+    rows.push_back({ L"Dropped",    fmt(L"%lld", static_cast<long long>(dropped_.load())) });
+    rows.push_back({ L"Decode",     fmt(L"%lld ms",
+                                        static_cast<long long>(codec_time_.load())) });
+    const int channels = audio_channels_.load();
+    rows.push_back({ L"Audio", channels > 0
+                                   ? fmt(L"%d ch  %d Hz", channels, audio_rate_.load())
+                                   : std::wstring(L"none") });
+
+    const float pad      = 12.0f;
+    const float line_h   = 20.0f;
+    const float gutter   = 12.0f;
+
+    // Size both columns from what is actually in them, so a long source name
+    // is not clipped and a short one does not leave the panel half empty.
+    float label_w = 0.0f;
+    float value_w = 0.0f;
+    for (const auto& r : rows) {
+        label_w = std::max(label_w, ctx.text_width(r.label, Font::Small));
+        value_w = std::max(value_w, ctx.text_width(r.value, Font::Mono));
+    }
+    value_w = std::clamp(value_w, 96.0f, 300.0f);
+
+    const float top       = kBarHeight + 14.0f;
+    const float available = ctx.height() - top - kBarHeight - 14.0f;
+
+    // Drop rows that will not fit rather than spill past the panel edge.
+    size_t visible = rows.size();
+    while (visible > 1 && pad * 2.0f + visible * line_h > available) --visible;
+
+    const float w = pad * 2.0f + label_w + gutter + value_w;
+    const float h = pad * 2.0f + visible * line_h;
+
+    const D2D1_RECT_F panel = D2D1::RectF(14.0f, top, 14.0f + w, top + h);
     ctx.fill_rect(panel, gfx::rgb(0x0B0D10, 0.82f), 8.0f);
     ctx.stroke_rect(panel, gfx::rgb(0xFFFFFF, 0.08f), 1.0f, 8.0f);
 
-    float y = panel.top + 12.0f;
-    auto line = [&](const wchar_t* label, const std::wstring& value) {
-        ctx.text(ui::rect(panel.left + 14.0f, y, 108.0f, 18.0f), label, Font::Small,
-                 theme().text_dim);
-        ctx.text(ui::rect(panel.left + 118.0f, y, w - 132.0f, 18.0f), value, Font::Mono,
-                 theme().text);
-        y += 20.0f;
-    };
-
-    line(L"Source",     title_);
-    line(L"Resolution", fmt(L"%dx%d%s", frame_w_.load(), frame_h_.load(),
-                            interlaced_ ? L"i" : L"p"));
-    line(L"Frame rate", fmt(L"%.2f fps", fps_.load()));
-    line(L"Codec",      util::widen(omt::codec_name(static_cast<OMTCodec>(codec_.load()))));
-    line(L"Bitrate",    fmt(L"%.2f Mb/s", mbps_.load()));
-    line(L"Frames",     fmt(L"%lld", static_cast<long long>(frames_.load())));
-    line(L"Dropped",    fmt(L"%lld", static_cast<long long>(dropped_.load())));
-    line(L"Decode",     fmt(L"%lld ms", static_cast<long long>(codec_time_.load())));
-
-    const int ch = audio_channels_;
-    line(L"Audio", ch > 0 ? fmt(L"%d ch  %d Hz", ch, audio_rate_.load())
-                          : std::wstring(L"none"));
+    float y = panel.top + pad;
+    for (size_t i = 0; i < visible; ++i) {
+        ctx.text(ui::rect(panel.left + pad, y, label_w, line_h - 2.0f),
+                 rows[i].label, Font::Small, theme().text_dim);
+        ctx.text(ui::rect(panel.left + pad + label_w + gutter, y, value_w, line_h - 2.0f),
+                 rows[i].value, Font::Mono, theme().text);
+        y += line_h;
+    }
 }
 
 void ViewerWindow::draw_metadata(ui::Ctx& ctx) {
@@ -579,10 +627,6 @@ void ViewerWindow::draw_metadata(ui::Ctx& ctx) {
 void ViewerWindow::on_render(ui::Ctx& ctx) {
     // Video has already been drawn by on_render_video.
     draw_status(ctx);
-
-    // Tally is polled on the receive thread; mirror it into the UI state.
-    tally_pgm_ = tally_pgm_state_.load();
-    tally_pvw_ = tally_pvw_state_.load();
 
     draw_meters(ctx);
     draw_stats(ctx);
