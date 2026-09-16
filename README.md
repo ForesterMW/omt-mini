@@ -219,6 +219,12 @@ other source. Nobody has to type an address anywhere.
 It is on by default. Turn it off and each entry gets its own Announce button,
 so you can pick.
 
+A source added without a name is called `Direct source`, numbered if there is
+more than one, and you can rename it at any time. It is deliberately not named
+after its address: a dot ends a label in DNS-SD and libomt does not escape
+them, so anything named after an IP is not announced at all. Dots are stripped
+out of names you type for the same reason.
+
 **No video passes through OMT Mini.** Each announcement is a sender that
 carries nothing and redirects to the machine the source actually lives on,
 which is what OMT calls a virtual source. Whatever connects is sent straight to

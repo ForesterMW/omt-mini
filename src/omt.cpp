@@ -1,5 +1,6 @@
 #include "omt.h"
 
+#include <algorithm>
 #include <mutex>
 
 namespace omt {
@@ -199,7 +200,11 @@ std::string safe_source_name(const std::string& name, const std::string& fallbac
         for (unsigned char ch : in) {
             if (ch < 0x20 || ch == 0x7F) continue;      // control characters
             if (ch == '(' || ch == ')') continue;       // delimit HOST (NAME)
-            out += (ch == ':') ? ' ' : static_cast<char>(ch);
+            // A dot ends a label in DNS-SD, and libomt does not escape them:
+            // its own sanitiser has exactly this replacement sitting commented
+            // out. A name carrying one is not announced at all.
+            if (ch == '.' || ch == ':') { out += ' '; continue; }
+            out += static_cast<char>(ch);
         }
         // Collapse runs of spaces left behind by the removals.
         std::string collapsed;
@@ -227,6 +232,19 @@ std::string safe_source_name(const std::string& name, const std::string& fallbac
         result = util::trim(result);
     }
     return result;
+}
+
+std::string default_direct_name(const std::vector<std::string>& taken) {
+    for (int n = 1; n < 1000; ++n) {
+        std::string candidate = "Direct source";
+        if (n > 1) candidate += " " + std::to_string(n);
+        const bool used = std::any_of(taken.begin(), taken.end(),
+                                      [&](const std::string& other) {
+                                          return util::iequals(other, candidate);
+                                      });
+        if (!used) return candidate;
+    }
+    return "Direct source";
 }
 
 bool has_explicit_port(const std::string& input) {

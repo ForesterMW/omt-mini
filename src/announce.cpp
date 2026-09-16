@@ -17,9 +17,9 @@ namespace {
 // The name this machine puts on the network for a source. Falls back to the
 // host, because "10.0.0.5" on the network is more use than nothing.
 std::string announce_name(const ManualSource& source) {
-    // Falls back to the machine it lives on, because a source with no name is
-    // one other applications will not list.
-    return omt::safe_source_name(source.name, omt::host_only(source.address));
+    // Never the address: an address is mostly dots, and a dot ends a label in
+    // DNS-SD, so a source named after one is not announced at all.
+    return omt::safe_source_name(source.name, "Direct source");
 }
 } // namespace
 

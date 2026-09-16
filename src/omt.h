@@ -119,6 +119,10 @@ bool has_explicit_port(const std::string& input);
 // source that other applications will not show, and the HOST (NAME) format
 // means brackets in a name break the parsing of it everywhere.
 std::string safe_source_name(const std::string& name, const std::string& fallback);
+// A name for a source added by address when none was given. Not the address
+// itself: an address is mostly dots, and a dot ends a label in DNS-SD, so a
+// source named after one does not appear on the network at all.
+std::string default_direct_name(const std::vector<std::string>& taken);
 // The host part of an address on its own, with no port, for naming a source
 // after the machine it lives on.
 std::string host_only(const std::string& address);

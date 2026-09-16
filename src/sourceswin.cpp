@@ -182,8 +182,9 @@ void SourcesWindow::finish_scan() {
             ? hit.product
             : (label.empty() ? std::string()
                              : util::narrow(label) + " " + std::to_string(hit.port));
-        entry.name = omt::safe_source_name(
-            preferred, omt::host_only(hit.address) + " " + std::to_string(hit.port));
+        std::vector<std::string> taken;
+        for (const auto& other : cfg.manual_sources) taken.push_back(other.name);
+        entry.name = omt::safe_source_name(preferred, omt::default_direct_name(taken));
         cfg.manual_sources.push_back(std::move(entry));
         ++added;
     }
@@ -229,8 +230,13 @@ void SourcesWindow::commit_add() {
         for (auto& entry : cfg.manual_sources) {
             if (entry.address != editing_address_) continue;
             entry.address = normalized;
-            entry.name    = omt::safe_source_name(util::narrow(add_name_text_),
-                                                  omt::host_only(normalized));
+            {
+                std::vector<std::string> taken;
+                for (const auto& other : cfg.manual_sources)
+                    if (other.address != editing_address_) taken.push_back(other.name);
+                entry.name = omt::safe_source_name(util::narrow(add_name_text_),
+                                                   omt::default_direct_name(taken));
+            }
             break;
         }
         cfg.save();
@@ -271,10 +277,13 @@ void SourcesWindow::commit_add() {
         return;
     }
 
+    std::vector<std::string> taken;
+    for (const auto& existing : cfg.manual_sources) taken.push_back(existing.name);
+
     ManualSource entry;
     entry.address = normalized;
     entry.name    = omt::safe_source_name(util::narrow(add_name_text_),
-                                          omt::host_only(normalized));
+                                          omt::default_direct_name(taken));
     cfg.manual_sources.push_back(std::move(entry));
     cfg.save();
     discovery().set_manual_sources(cfg.manual_sources);
