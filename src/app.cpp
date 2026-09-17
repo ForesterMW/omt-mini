@@ -313,7 +313,7 @@ bool App::toggle_webcam() {
         MessageBoxW(nullptr,
                     L"Choose a source for the webcam output in Settings first.",
                     L"OMT Mini", MB_OK | MB_ICONINFORMATION);
-        show_settings(5);
+        show_settings(settings_tab::Webcam);
         return false;
     }
     if (!WebcamOutput::filter_registered()) {
@@ -671,11 +671,11 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 case kIdShowSources:    show_sources(); return 0;
                 case kIdMultiview:      show_multiview(); return 0;
                 case kIdMultiviewOut:   toggle_multiview_output(); return 0;
-                case kIdSettings:       show_settings(0); return 0;
+                case kIdSettings:       show_settings(settings_tab::General); return 0;
                 case kIdCloseViewers:   close_all_viewers(); return 0;
                 case kIdDesktopCapture: toggle_desktop_capture(); return 0;
                 case kIdWebcam:         toggle_webcam(); return 0;
-                case kIdUpdate:         show_settings(8); return 0;
+                case kIdUpdate:         show_settings(settings_tab::About); return 0;
                 case kIdOpenLog:
                     ShellExecuteW(nullptr, L"open", util::config_dir().c_str(),
                                   nullptr, nullptr, SW_SHOWNORMAL);

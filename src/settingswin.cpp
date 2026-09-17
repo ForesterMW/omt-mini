@@ -28,11 +28,17 @@ constexpr float kTabsH  = 44.0f;
 constexpr float kRowH   = 44.0f;
 constexpr float kLabelW = 190.0f;
 
+// Sized from its own initialiser, then checked against the enum, so a tab
+// added to one and not the other will not build.
+constexpr const wchar_t* kTabLabels[] = {
+    L"General", L"Sources", L"Network", L"Viewer", L"Desktop", L"Webcam",
+    L"Multiview", L"Web", L"About",
+};
+static_assert(sizeof(kTabLabels) / sizeof(kTabLabels[0]) == settings_tab::Count,
+              "every settings tab needs a label, and every label needs a tab");
+
 const std::vector<std::wstring>& tab_labels() {
-    static const std::vector<std::wstring> v = {
-        L"General", L"Sources", L"Network", L"Viewer", L"Desktop", L"Webcam",
-        L"Multiview", L"Web", L"About"
-    };
+    static const std::vector<std::wstring> v(std::begin(kTabLabels), std::end(kTabLabels));
     return v;
 }
 
@@ -1029,15 +1035,15 @@ void SettingsWindow::on_render(ui::Ctx& ctx) {
                                          ctx.height() - footer_h);
 
     switch (active_tab_) {
-        case 0: tab_general(ctx, body); break;
-        case 1: tab_sources(ctx, body); break;
-        case 2: tab_network(ctx, body); break;
-        case 3: tab_viewer(ctx, body);  break;
-        case 4: tab_desktop(ctx, body); break;
-        case 5: tab_webcam(ctx, body);  break;
-        case 6: tab_multiview(ctx, body); break;
-        case 7: tab_web(ctx, body); break;
-        default: tab_about(ctx, body);  break;
+        case settings_tab::General:   tab_general(ctx, body);   break;
+        case settings_tab::Sources:   tab_sources(ctx, body);   break;
+        case settings_tab::Network:   tab_network(ctx, body);   break;
+        case settings_tab::Viewer:    tab_viewer(ctx, body);    break;
+        case settings_tab::Desktop:   tab_desktop(ctx, body);   break;
+        case settings_tab::Webcam:    tab_webcam(ctx, body);    break;
+        case settings_tab::Multiview: tab_multiview(ctx, body); break;
+        case settings_tab::Web:       tab_web(ctx, body);       break;
+        default:                      tab_about(ctx, body);     break;
     }
 
     // Footer: transient status on the left, close on the right.

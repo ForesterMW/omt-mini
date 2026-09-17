@@ -6,12 +6,14 @@
 #include "scan.h"
 #include "multiview.h"
 #include "announce.h"
+#include "settingswin.h"
 #include "omt.h"
 #include "update.h"
 #include "settings.h"
 #include "scan.h"
 #include "multiview.h"
 #include "announce.h"
+#include "settingswin.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -111,7 +113,7 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
 
     if (ctx.button(11, ui::rect(ctx.width() - 112.0f, 16.0f, 92.0f, 28.0f), L"Settings",
                    ButtonStyle::Normal))
-        App::instance().show_settings(0);
+        App::instance().show_settings(settings_tab::General);
 
     // Add a source without going through Settings.
     if (ctx.icon_button(13, ui::rect(ctx.width() - 148.0f, 16.0f, 28.0f, 28.0f),
@@ -135,7 +137,7 @@ void SourcesWindow::draw_header(ui::Ctx& ctx) {
         const float w = ctx.text_width(label, Font::Small) + 26.0f;
         if (ctx.button(12, ui::rect(ctx.width() - 124.0f - w, 16.0f, w, 28.0f), label,
                        ButtonStyle::Primary))
-            App::instance().show_settings(7);
+            App::instance().show_settings(settings_tab::About);
     }
 }
 

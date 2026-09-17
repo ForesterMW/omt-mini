@@ -7,6 +7,16 @@
 #include <vector>
 #include <string>
 
+// Tab indices, named. A tab inserted in the middle used to silently send
+// callers to the wrong page: adding Web between Multiview and About left the
+// update button opening Web. Numbers do not survive that; names do.
+namespace settings_tab {
+enum Index {
+    General = 0, Sources, Network, Viewer, Desktop, Webcam, Multiview, Web, About,
+    Count
+};
+}
+
 class SettingsWindow : public Window {
 public:
     void open_or_focus(int tab = 0);
