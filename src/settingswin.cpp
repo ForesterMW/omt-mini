@@ -4,6 +4,7 @@
 #include "discovery.h"
 #include "multiview.h"
 #include "announce.h"
+#include "webui.h"
 #include "capture.h"
 #include "webcam.h"
 #include "omt.h"
@@ -11,6 +12,7 @@
 #include "discovery.h"
 #include "multiview.h"
 #include "announce.h"
+#include "webui.h"
 
 #include <shellapi.h>
 #include <algorithm>
@@ -29,7 +31,7 @@ constexpr float kLabelW = 190.0f;
 const std::vector<std::wstring>& tab_labels() {
     static const std::vector<std::wstring> v = {
         L"General", L"Sources", L"Network", L"Viewer", L"Desktop", L"Webcam",
-        L"Multiview", L"About"
+        L"Multiview", L"Web", L"About"
     };
     return v;
 }
@@ -102,6 +104,7 @@ void SettingsWindow::open_or_focus(int tab) {
     port_end_text_     = std::to_wstring(cfg.port_end);
     capture_name_text_ = util::widen(cfg.capture_name);
     mv_name_text_      = util::widen(cfg.multiview_output_name);
+    web_port_text_     = std::to_wstring(cfg.web_port);
     monitors_          = DesktopCapture::enumerate_monitors();
 
     if (hwnd_) {
@@ -780,6 +783,94 @@ void SettingsWindow::tab_multiview(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     }
 }
 
+// ---- Control panel -----------------------------------------------------
+void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
+    Settings& cfg = settings();
+    const bool live = web_server().running();
+    float y = area.top + 4.0f;
+
+    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 40.0f),
+                     L"A page for controlling this copy from a browser on another "
+                     L"machine: what is open, where it is, and what it is showing.",
+                     Font::Small, theme().text_dim);
+    y += 46.0f;
+
+    if (ctx.checkbox(1001, ui::rect(area.left, y, 420.0f, 24.0f), &cfg.web_enabled,
+                     L"Serve the control panel")) {
+        dirty_ = true;
+        if (cfg.web_enabled) {
+            if (!web_server().start(cfg.web_port))
+                status_message_ = util::widen(web_server().error());
+        } else {
+            web_server().stop();
+        }
+        invalidate();
+    }
+    y += 34.0f;
+
+    ctx.text(ui::rect(area.left, y, kLabelW, 26.0f), L"Port", Font::Body, theme().text);
+    if (ctx.text_field(1002, D2D1::RectF(area.left + kLabelW, y,
+                                         area.left + kLabelW + 110.0f, y + 28.0f),
+                       &web_port_text_, L"7400", true))
+        dirty_ = true;
+
+    if (ctx.button(1003, ui::rect(area.left + kLabelW + 122.0f, y, 90.0f, 28.0f),
+                   L"Apply", ButtonStyle::Normal)) {
+        try { cfg.web_port = std::stoi(util::narrow(web_port_text_)); } catch (...) {}
+        cfg.web_port = std::clamp(cfg.web_port, 1024, 65535);
+        web_port_text_ = std::to_wstring(cfg.web_port);
+        cfg.save();
+        if (cfg.web_enabled) {
+            web_server().stop();
+            if (!web_server().start(cfg.web_port))
+                status_message_ = util::widen(web_server().error());
+            else
+                status_message_ = L"Listening on port " + web_port_text_;
+            status_until_ms_ = util::now_ms() + 4000;
+        }
+        invalidate();
+    }
+    y += 42.0f;
+
+    ctx.separator(area.left, area.right, y);
+    y += 14.0f;
+
+    if (live) {
+        ctx.text(ui::rect(area.left, y, 200.0f, 20.0f), L"Open from a browser at",
+                 Font::Small, theme().text_dim, Align::Left, false);
+        y += 22.0f;
+        for (const auto& url : web_server().urls()) {
+            ctx.text(ui::rect(area.left, y, area.right - area.left - 120.0f, 22.0f),
+                     util::widen(url), Font::Mono, theme().ok, Align::Left, false);
+            y += 24.0f;
+        }
+        y += 6.0f;
+        if (ctx.button(1004, ui::rect(area.left, y, 170.0f, 32.0f), L"Open here",
+                       ButtonStyle::Normal)) {
+            const auto urls = web_server().urls();
+            if (!urls.empty())
+                ShellExecuteW(nullptr, L"open", util::widen(urls.back()).c_str(),
+                              nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        y += 44.0f;
+    } else if (!web_server().error().empty()) {
+        ctx.text(ui::rect(area.left, y, area.right - area.left, 20.0f),
+                 util::widen(web_server().error()), Font::Small, theme().danger,
+                 Align::Left, false);
+        y += 30.0f;
+    } else {
+        ctx.text(ui::rect(area.left, y, area.right - area.left, 20.0f), L"Not running",
+                 Font::Small, theme().text_dim, Align::Left, false);
+        y += 30.0f;
+    }
+
+    ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 52.0f),
+                     L"Anyone who can reach this port can move, retarget and close "
+                     L"windows on this machine. There is no password. Only turn it on "
+                     L"where you trust the network.",
+                     Font::Small, theme().warn);
+}
+
 // ---- About and updates -------------------------------------------------
 void SettingsWindow::tab_about(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     Settings& cfg = settings();
@@ -943,6 +1034,7 @@ void SettingsWindow::on_render(ui::Ctx& ctx) {
         case 4: tab_desktop(ctx, body); break;
         case 5: tab_webcam(ctx, body);  break;
         case 6: tab_multiview(ctx, body); break;
+        case 7: tab_web(ctx, body); break;
         default: tab_about(ctx, body);  break;
     }
 

@@ -19,6 +19,9 @@ public:
     bool open();
     const std::string& address() const { return address_; }
     bool closed() const { return closed_; }
+    // Stable for the lifetime of the window, so the control panel can name it.
+    int  id() const { return id_; }
+    const std::wstring& title() const { return title_; }
 
 protected:
     void on_render(ui::Ctx& ctx) override;
@@ -41,6 +44,7 @@ private:
 
     std::string        address_;
     std::wstring       title_;
+    int                id_ = 0;
     std::thread        thread_;
     std::atomic<bool>  running_{false};
     std::atomic<bool>  closed_{false};

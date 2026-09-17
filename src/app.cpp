@@ -8,6 +8,8 @@
 #include "settings.h"
 #include "update.h"
 #include "announce.h"
+#include "webui.h"
+#include "scan.h"
 #include "omt.h"
 #include "gfx.h"
 
@@ -380,6 +382,166 @@ void App::do_install_update() {
     quit();
 }
 
+// ---- control panel ------------------------------------------------------
+std::vector<WebWindow> App::web_windows() {
+    prune_viewers();
+    std::vector<WebWindow> out;
+
+    auto describe = [](HWND hwnd, WebWindow& info) {
+        if (!hwnd) return false;
+        RECT rc{};
+        if (!GetWindowRect(hwnd, &rc)) return false;
+        WINDOWPLACEMENT placement{ sizeof(placement) };
+        GetWindowPlacement(hwnd, &placement);
+        info.x = rc.left;
+        info.y = rc.top;
+        info.width = rc.right - rc.left;
+        info.height = rc.bottom - rc.top;
+        info.minimized = placement.showCmd == SW_SHOWMINIMIZED;
+        info.maximized = placement.showCmd == SW_SHOWMAXIMIZED;
+        return true;
+    };
+
+    for (const auto& viewer : viewers_) {
+        if (!viewer || viewer->closed()) continue;
+        WebWindow info;
+        info.id      = viewer->id();
+        info.kind    = "viewer";
+        info.title   = util::narrow(viewer->title());
+        info.address = viewer->address();
+        if (describe(viewer->hwnd(), info)) out.push_back(std::move(info));
+    }
+
+    if (multiview_window_ && !multiview_window_->closed()) {
+        WebWindow info;
+        info.id    = 1;
+        info.kind  = "multiview";
+        info.title = "Multiview";
+        if (describe(multiview_window_->hwnd(), info)) out.push_back(std::move(info));
+    }
+    return out;
+}
+
+void App::web_add_source(const std::string& typed) {
+    Settings& cfg = settings();
+    const std::string trimmed = util::trim(typed);
+    if (trimmed.empty()) return;
+
+    if (!omt::has_explicit_port(trimmed)) {
+        // Same walk the source list does: a machine usually has more than one.
+        std::string host, port;
+        const std::string probe = omt::normalize_address(trimmed, cfg.port_start);
+        if (omt::split_address(probe, &host, &port)) {
+            scan_for_web_ = true;
+            port_scanner().start(host, cfg.port_start, cfg.port_end, 10, hwnd_);
+            return;
+        }
+    }
+
+    const std::string normalized = omt::normalize_address(trimmed);
+    if (normalized.empty()) return;
+    const bool exists = std::any_of(cfg.manual_sources.begin(), cfg.manual_sources.end(),
+                                    [&](const ManualSource& m) { return m.address == normalized; });
+    if (exists) return;
+
+    std::vector<std::string> taken;
+    for (const auto& other : cfg.manual_sources) taken.push_back(other.name);
+
+    ManualSource entry;
+    entry.address = normalized;
+    entry.name    = omt::safe_source_name("", omt::default_direct_name(taken));
+    cfg.manual_sources.push_back(std::move(entry));
+    cfg.save();
+    discovery().set_manual_sources(cfg.manual_sources);
+    util::logf("web: added source %s", normalized.c_str());
+}
+
+void App::apply_web_commands() {
+    std::vector<WebCommand> commands;
+    if (!web_server().take_commands(&commands)) return;
+
+    prune_viewers();
+
+    auto find_window = [this](int id) -> HWND {
+        if (id == 1 && multiview_window_ && !multiview_window_->closed())
+            return multiview_window_->hwnd();
+        for (const auto& viewer : viewers_)
+            if (viewer && !viewer->closed() && viewer->id() == id) return viewer->hwnd();
+        return nullptr;
+    };
+
+    for (const auto& command : commands) {
+        switch (command.kind) {
+            case WebCommand::Kind::SetSource: {
+                // A viewer is bound to its source for its lifetime, so changing
+                // it means a new window. It is put back exactly where the old
+                // one was, which is what makes it look like a change rather
+                // than a replacement.
+                HWND existing = find_window(command.id);
+                RECT rc{};
+                const bool had_rect = existing && GetWindowRect(existing, &rc);
+                if (existing) {
+                    SendMessageW(existing, WM_CLOSE, 0, 0);
+                    prune_viewers();
+                }
+                open_viewer(command.address);
+                if (had_rect && !viewers_.empty()) {
+                    HWND fresh = viewers_.back()->hwnd();
+                    if (fresh)
+                        SetWindowPos(fresh, nullptr, rc.left, rc.top,
+                                     rc.right - rc.left, rc.bottom - rc.top,
+                                     SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                break;
+            }
+            case WebCommand::Kind::Move: {
+                HWND hwnd = find_window(command.id);
+                if (!hwnd) break;
+                // Moving a maximised window has to restore it first or the
+                // change is ignored.
+                WINDOWPLACEMENT placement{ sizeof(placement) };
+                GetWindowPlacement(hwnd, &placement);
+                if (placement.showCmd == SW_SHOWMAXIMIZED) ShowWindow(hwnd, SW_RESTORE);
+                SetWindowPos(hwnd, nullptr, command.x, command.y,
+                             std::max(160, command.width), std::max(120, command.height),
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+                break;
+            }
+            case WebCommand::Kind::WindowState: {
+                HWND hwnd = find_window(command.id);
+                if (!hwnd) break;
+                if (command.state == "maximize")      ShowWindow(hwnd, SW_MAXIMIZE);
+                else if (command.state == "minimize") ShowWindow(hwnd, SW_MINIMIZE);
+                else                                  ShowWindow(hwnd, SW_RESTORE);
+                break;
+            }
+            case WebCommand::Kind::OpenViewer:
+                if (!command.address.empty()) open_viewer(command.address);
+                break;
+            case WebCommand::Kind::CloseWindow: {
+                HWND hwnd = find_window(command.id);
+                if (hwnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                break;
+            }
+            case WebCommand::Kind::MultiviewTile:
+                multiview_engine().set_source(static_cast<size_t>(command.index),
+                                              command.address);
+                break;
+            case WebCommand::Kind::MultiviewLayout:
+                multiview_engine().set_layout(command.index);
+                break;
+            case WebCommand::Kind::OpenMultiview:
+                show_multiview();
+                break;
+            case WebCommand::Kind::AddSource:
+                web_add_source(command.address);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 LRESULT CALLBACK App::wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     App& app = App::instance();
     // Adopt the handle on creation, but never after quit() has released it:
@@ -429,6 +591,39 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             do_toggle_multiview_output();
             return 0;
 
+        case WM_OMT_WEBCMD:
+            apply_web_commands();
+            return 0;
+
+        case WM_OMT_SCAN:
+            // A walk started from the control panel has nobody watching it, so
+            // its results are taken here.
+            if (wp == 1 && scan_for_web_) {
+                scan_for_web_ = false;
+                Settings& cfg = settings();
+                int added = 0;
+                for (const auto& hit : port_scanner().state().hits) {
+                    const bool exists = std::any_of(
+                        cfg.manual_sources.begin(), cfg.manual_sources.end(),
+                        [&](const ManualSource& m) { return m.address == hit.address; });
+                    if (exists) continue;
+                    std::vector<std::string> taken;
+                    for (const auto& other : cfg.manual_sources) taken.push_back(other.name);
+                    ManualSource entry;
+                    entry.address = hit.address;
+                    entry.name = omt::safe_source_name(hit.product,
+                                                       omt::default_direct_name(taken));
+                    cfg.manual_sources.push_back(std::move(entry));
+                    ++added;
+                }
+                if (added > 0) {
+                    cfg.save();
+                    discovery().set_manual_sources(cfg.manual_sources);
+                    util::logf("web: walk added %d source(s)", added);
+                }
+            }
+            return 0;
+
         case WM_OMT_UPDATE: {
             if (sources_window_) sources_window_->invalidate();
             if (settings_window_) settings_window_->invalidate();
@@ -459,7 +654,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 case kIdCloseViewers:   close_all_viewers(); return 0;
                 case kIdDesktopCapture: toggle_desktop_capture(); return 0;
                 case kIdWebcam:         toggle_webcam(); return 0;
-                case kIdUpdate:         show_settings(7); return 0;
+                case kIdUpdate:         show_settings(8); return 0;
                 case kIdOpenLog:
                     ShellExecuteW(nullptr, L"open", util::config_dir().c_str(),
                                   nullptr, nullptr, SW_SHOWNORMAL);
@@ -513,6 +708,9 @@ bool App::init(HINSTANCE instance) {
     SetTimer(hwnd_, 99, 1000, nullptr);
 
     const Settings& cfg = settings();
+
+    if (cfg.web_enabled && !web_server().start(cfg.web_port))
+        util::logf("web: could not start: %s", web_server().error().c_str());
     if (cfg.capture_autostart) desktop_capture().start();
     if (cfg.webcam_autostart && !cfg.webcam_source.empty() &&
         WebcamOutput::filter_registered())
@@ -544,6 +742,7 @@ void App::quit() {
     sources_window_.reset();
     settings_window_.reset();
 
+    web_server().stop();
     announcer().stop();
     multiview_output().stop();
     webcam().stop();

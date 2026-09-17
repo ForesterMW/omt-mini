@@ -2,7 +2,7 @@
 
 **Every Open Media Transport tool you need on Windows, in one tray icon.**
 Viewer, multiviewer, screen capture, virtual webcam and source management, in a
-939 KB executable that idles at effectively zero CPU.
+1 MB executable that idles at effectively zero CPU.
 
 [![Latest release](https://img.shields.io/github/v/release/ForesterMW/omt-mini?label=download&color=3b82f6)](../../releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/ForesterMW/omt-mini/total?color=22c55e)](../../releases)
@@ -25,6 +25,7 @@ If you know NDI Tools, you already know what this is.
 | Webcam Input | **Virtual webcam** | Appears as a camera in Teams, Zoom, OBS |
 | Access Manager | **Direct sources** | Reach a sender on another subnet, and put it on mDNS for everyone else |
 | Studio Monitor, several of them | **Multiview** | One wall, seven layouts, and it can be sent as a source of its own |
+| nothing like it | **Web control panel** | Drive the whole thing from a browser on another machine |
 
 All of it from one tray icon, one install, one thing to update.
 
@@ -93,6 +94,23 @@ Added sources can then be **announced on mDNS**, which makes them visible to
 vMix and everything else that browses for OMT sources, with no video passing
 through this machine.
 
+### Web control panel
+
+A page served by OMT Mini itself, for driving it from a browser on another
+machine. Off by default, turned on under **Settings > Web**.
+
+- Every open viewer and the multiview drawn **where they actually are**, to
+  scale, across your real monitor layout
+- Drag a window to move it, the corner to resize, double click to maximise,
+  and the window on the machine follows
+- **Drag a source from the list onto a window to retarget it**, or onto empty
+  desktop to open a new viewer
+- Drag sources onto the multiview cells, and change its layout
+- Add a source by address remotely, including the port walk
+
+Nothing to install at the other end and no dependencies: it is one page served
+from memory.
+
 ### Kept up to date
 
 Checks the public GitHub releases and installs the latest stable build in one
@@ -115,7 +133,7 @@ To remove it, use Apps & features, or run `OMTMini.exe --uninstall`.
 
 Most of the download is the official `libomt.dll` and `libvmx.dll` from the
 Open Media Transport project, redistributed unmodified. OMT Mini itself is
-939 KB.
+1 MB.
 
 ## Using it
 
@@ -227,7 +245,7 @@ The shell scripts need bash. On Windows use Git Bash or WSL.
 
 ## How it is put together
 
-About 13,400 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with
+About 14,700 lines of C++17 against raw Win32, Direct2D and Direct3D 11, with
 no framework and no package manager. The only runtime dependencies are Windows
 itself and the two OMT DLLs.
 
@@ -246,6 +264,8 @@ itself and the two OMT DLLs.
 | `src/webcam.*` | Receiver writing into a shared memory ring the filter reads |
 | `src/update.*` | Update check and install over WinHTTP, verified with BCrypt |
 | `src/netinfo.*` | Local address, host resolution, and reading back which port a sender took |
+| `src/webui.*` | The control panel's HTTP server and its API |
+| `src/webpage.h` | The control panel itself, one page with no dependencies |
 | `vcam/` | The DirectShow source filter, written against raw COM because the DirectShow base classes are an MSVC sample a mingw cross build cannot use |
 | `installer/` | Self extracting per user installer, payload appended to the executable |
 
@@ -266,6 +286,9 @@ itself and the two OMT DLLs.
   needs a discovery server, which is the only remote enumeration libomt offers.
 - The reachability dot means a TCP connection was accepted, not that an OMT
   sender is behind it. The port walk goes further and confirms each hit.
+- **The control panel has no password.** Anyone who can reach its port can
+  move, retarget and close windows on that machine. It is off by default and
+  should only be turned on where you trust the network.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 

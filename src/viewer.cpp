@@ -44,6 +44,9 @@ std::wstring fmt(const wchar_t* format, ...) {
 } // namespace
 
 ViewerWindow::ViewerWindow(const std::string& address) : address_(address) {
+    static std::atomic<int> next_id{100};
+    id_ = next_id++;
+
     title_ = util::widen(omt::short_name(address));
     if (title_.empty()) title_ = util::widen(address);
 

@@ -88,6 +88,12 @@ struct Settings {
     // per source, once, and nothing after that.
     bool        identify_sources = true;
 
+    // ---- Control panel ----
+    // Off unless asked for: it can close a window on a machine that is on air,
+    // so it should not start listening on a network without being turned on.
+    bool        web_enabled = false;
+    int         web_port = 7400;
+
     // ---- Updates ----
     // Checking is a read only call to the public GitHub API. Installing is
     // never automatic and always needs an explicit press.

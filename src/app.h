@@ -3,6 +3,7 @@
 #pragma once
 #include "util.h"
 #include "viewer.h"
+#include "webui.h"
 
 #include <memory>
 #include <vector>
@@ -42,6 +43,12 @@ public:
     void notify(const std::wstring& title, const std::wstring& message);
 
     size_t viewer_count() const { return viewers_.size(); }
+
+    // ---- control panel ----
+    // Built on the interface thread, handed to the socket thread as a copy.
+    std::vector<WebWindow> web_windows();
+    void apply_web_commands();
+    void web_add_source(const std::string& typed);
     HWND   message_window() const { return hwnd_; }
 
     // Start at login is stored in the per-user Run key.
@@ -74,5 +81,6 @@ private:
     std::unique_ptr<SettingsWindow> settings_window_;
     std::unique_ptr<MultiviewWindow> multiview_window_;
     std::vector<std::string>        menu_sources_;
+    bool                            scan_for_web_ = false;
     bool                            update_announced_ = false;
 };

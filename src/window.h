@@ -20,6 +20,7 @@
 #define WM_OMT_SCAN     (WM_APP + 17)
 #define WM_OMT_MVACTION (WM_APP + 18)
 #define WM_OMT_MVOUTPUT (WM_APP + 19)
+#define WM_OMT_WEBCMD   (WM_APP + 20)
 
 class Window {
 public:

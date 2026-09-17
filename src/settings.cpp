@@ -118,6 +118,8 @@ void Settings::load() {
     webcam_autostart        = get_bool(kv, "webcam_autostart", webcam_autostart);
 
     identify_sources        = get_bool(kv, "identify_sources", identify_sources);
+    web_enabled             = get_bool(kv, "web_enabled", web_enabled);
+    web_port                = clampi(get_int(kv, "web_port", web_port), 1024, 65535);
     announce_manual_sources = get_bool(kv, "announce_manual_sources", announce_manual_sources);
     check_updates_on_launch = get_bool(kv, "check_updates_on_launch", check_updates_on_launch);
 
@@ -209,6 +211,10 @@ void Settings::save() const {
     putb("webcam_autostart", webcam_autostart);
 
     putb("identify_sources", identify_sources);
+
+    out += "\r\n# Control panel\r\n";
+    putb("web_enabled", web_enabled);
+    puti("web_port", web_port);
 
     out += "\r\n# Updates\r\n";
     putb("check_updates_on_launch", check_updates_on_launch);
