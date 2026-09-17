@@ -234,8 +234,8 @@ void App::open_viewer(const std::string& address) {
     auto viewer = std::make_unique<ViewerWindow>(address);
     if (!viewer->open()) {
         util::logf("app: viewer failed to open for '%s'", address.c_str());
-        MessageBoxW(nullptr, L"The viewer window could not be created.",
-                    L"OMT Mini", MB_OK | MB_ICONERROR);
+        MessageBoxW(dialog_owner(), L"The viewer window could not be created.",
+                    L"OMT Mini", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
         return;
     }
     viewers_.push_back(std::move(viewer));
@@ -268,8 +268,8 @@ void App::do_toggle_multiview_output() {
         settings().multiview_output_enabled = true;
         settings().save();
     } else {
-        MessageBoxW(nullptr, L"The multiview output could not start. See the log.",
-                    L"OMT Mini", MB_OK | MB_ICONWARNING);
+        MessageBoxW(dialog_owner(), L"The multiview output could not start. See the log.",
+                    L"OMT Mini", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
     }
 
     if (sources_window_)   sources_window_->invalidate();
@@ -294,9 +294,9 @@ bool App::toggle_desktop_capture() {
         return false;
     }
     if (!desktop_capture().start()) {
-        MessageBoxW(nullptr,
+        MessageBoxW(dialog_owner(),
                     L"Desktop capture could not start. See the log for details.",
-                    L"OMT Mini", MB_OK | MB_ICONWARNING);
+                    L"OMT Mini", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
         return false;
     }
     return true;
@@ -310,26 +310,38 @@ bool App::toggle_webcam() {
 
     const std::string source = settings().webcam_source;
     if (source.empty()) {
-        MessageBoxW(nullptr,
+        MessageBoxW(dialog_owner(),
                     L"Choose a source for the webcam output in Settings first.",
-                    L"OMT Mini", MB_OK | MB_ICONINFORMATION);
+                    L"OMT Mini", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
         show_settings(settings_tab::Webcam);
         return false;
     }
     if (!WebcamOutput::filter_registered()) {
-        const int answer = MessageBoxW(nullptr,
+        const int answer = MessageBoxW(dialog_owner(),
             L"The OMT Mini virtual camera is not registered yet.\n\n"
             L"Register it now for this user? No administrator rights are needed.",
-            L"OMT Mini", MB_YESNO | MB_ICONQUESTION);
+            L"OMT Mini", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND | MB_TOPMOST);
         if (answer != IDYES) return false;
 
         std::wstring message;
         if (!WebcamOutput::register_filter(true, &message)) {
-            MessageBoxW(nullptr, message.c_str(), L"OMT Mini", MB_OK | MB_ICONERROR);
+            MessageBoxW(dialog_owner(), message.c_str(), L"OMT Mini", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
             return false;
         }
     }
     return webcam().start(source);
+}
+
+HWND App::dialog_owner() const {
+    // An owned dialog stays above its owner and gets grouped with it on the
+    // taskbar. Without one, and without asking for the foreground, a
+    // confirmation can open behind the window that asked for it, which reads
+    // as the button having done nothing at all.
+    if (settings_window_ && settings_window_->visible()) return settings_window_->hwnd();
+    if (sources_window_ && sources_window_->visible())   return sources_window_->hwnd();
+    if (multiview_window_ && !multiview_window_->closed() && multiview_window_->visible())
+        return multiview_window_->hwnd();
+    return nullptr;
 }
 
 void App::install_update() {
@@ -352,10 +364,10 @@ void App::do_install_update() {
     }
 
     if (!viewers_.empty() || desktop_capture().running() || webcam().running()) {
-        const int answer = MessageBoxW(nullptr,
+        const int answer = MessageBoxW(dialog_owner(),
             L"Installing will close the viewers and stop desktop capture and the "
             L"webcam output.\n\nContinue?",
-            L"OMT Mini", MB_YESNO | MB_ICONQUESTION);
+            L"OMT Mini", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND | MB_TOPMOST);
         if (answer != IDYES) {
             util::logf("update: install declined at the confirmation");
             return;
@@ -374,8 +386,8 @@ void App::do_install_update() {
                                            nullptr, nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<INT_PTR>(result) <= 32) {
         util::logf("update: ShellExecute failed err=%lu", GetLastError());
-        MessageBoxW(nullptr, L"The installer could not be started.", L"OMT Mini",
-                    MB_OK | MB_ICONERROR);
+        MessageBoxW(dialog_owner(), L"The installer could not be started.", L"OMT Mini",
+                    MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
         if (settings_window_) settings_window_->show();
         return;
     }
@@ -401,15 +413,24 @@ void App::refresh_web_snapshot() {
         if (!hwnd) return false;
         RECT rc{};
         if (!GetWindowRect(hwnd, &rc)) return false;
+
         WINDOWPLACEMENT placement{ sizeof(placement) };
         placement.length = sizeof(placement);
         GetWindowPlacement(hwnd, &placement);
+
+        info.minimized = placement.showCmd == SW_SHOWMINIMIZED;
+        info.maximized = placement.showCmd == SW_SHOWMAXIMIZED;
+
+        // A minimised window's rectangle is parked far off screen, around
+        // minus thirty two thousand. Reporting that puts it outside the panel
+        // entirely, which looks exactly like it was closed. Its restored
+        // position is what should be shown, dimmed.
+        if (info.minimized) rc = placement.rcNormalPosition;
+
         info.x = rc.left;
         info.y = rc.top;
         info.width = rc.right - rc.left;
         info.height = rc.bottom - rc.top;
-        info.minimized = placement.showCmd == SW_SHOWMINIMIZED;
-        info.maximized = placement.showCmd == SW_SHOWMAXIMIZED;
         return true;
     };
 
@@ -722,9 +743,9 @@ bool App::init(HINSTANCE instance) {
         return false;
     }
     if (!add_tray_icon()) {
-        MessageBoxW(nullptr,
+        MessageBoxW(dialog_owner(),
                     L"OMT Mini could not create its tray icon.",
-                    L"OMT Mini", MB_OK | MB_ICONERROR);
+                    L"OMT Mini", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
         return false;
     }
 

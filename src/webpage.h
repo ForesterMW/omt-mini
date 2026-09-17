@@ -91,7 +91,8 @@ section{margin-top:4px}
 }
 .win.mv{border-color:var(--violet)}
 .win.drop{border-color:var(--accent);background:var(--panel-sel)}
-.win.min{opacity:.45}
+.win.min{opacity:.5;border-style:dashed}
+.win.min .cap{color:var(--dim)}
 .win .cap{
   padding:5px 8px;font-size:11.5px;font-weight:600;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -250,7 +251,19 @@ async function poll(){
   if(!s)return;
   const sig=JSON.stringify(s);
   if(sig===lastSig)return;   // unchanged, so leave the page alone entirely
-  lastSig=sig; state=s; sources=s.sources||[]; render();
+
+  state=s; sources=s.sources||[];
+  try{
+    render();
+    // Recorded only once the page really shows this state. Marking it before
+    // drawing meant a single failed render was remembered as done, and every
+    // later poll matched it and skipped, so the page stopped updating until
+    // something forced it. Windows closed on the machine then sat there.
+    lastSig=sig;
+  }catch(e){
+    lastSig="";
+    console.error(e);
+  }
 }
 
 function tagsFor(s){
@@ -341,8 +354,9 @@ function renderDesk(){
     e.innerHTML=
       `<div class="cap">${esc(w.title)}${w.kind==="multiview"?
          '<span class="tag direct">multiview</span>':""}</div>
-       <div class="body">${esc(w.address||(w.maximized?"maximised":""))}</div>
-       <div class="m" title="${w.minimized?"Restore":"Minimise"}">${w.minimized?"&#9633;":"&minus;"}</div>
+       <div class="body">${w.minimized?"minimised":
+         esc(w.address||(w.maximized?"maximised":""))}</div>
+       <div class="m" title="${w.minimized?"Restore":"Minimise"}">${w.minimized?"&#9723;":"&minus;"}</div>
        <div class="x" title="Close">&times;</div><div class="grip"></div>`;
     d.appendChild(e);
     wireWindow(e,w,scale);

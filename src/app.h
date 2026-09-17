@@ -73,6 +73,8 @@ private:
     void show_tray_menu();
     void prune_viewers();
     void do_install_update();
+    // A visible window to own a dialog, so it cannot open behind everything.
+    HWND dialog_owner() const;
     void do_toggle_multiview_output();
 
     HINSTANCE    instance_ = nullptr;
