@@ -97,11 +97,14 @@ section{margin-top:4px}
 }
 .win .body{padding:6px 8px;font-size:11px;color:var(--dim);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.win .x{
-  position:absolute;top:3px;right:4px;width:18px;height:18px;line-height:16px;
+.win .x,.win .m{
+  position:absolute;top:3px;width:18px;height:18px;line-height:16px;
   text-align:center;border-radius:4px;color:var(--dim);cursor:pointer;font-size:14px;
 }
+.win .x{right:4px}
+.win .m{right:24px;font-size:15px}
 .win .x:hover{background:var(--danger);color:#fff}
+.win .m:hover{background:var(--panel-sel);color:var(--text)}
 .win .grip{
   position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;
   background:linear-gradient(135deg,transparent 50%,var(--dim) 50%);
@@ -165,7 +168,8 @@ select{
       </div>
       <div class="hint">
         Drag a source onto a window to change it. Drag a window to move it,
-        the corner to resize, double click to maximise.
+        the corner to resize, double click to maximise, and the buttons on a
+        window to minimise or close it.
       </div>
       <div id="desk"></div>
     </section>
@@ -191,6 +195,15 @@ const LAYOUTS=[
 
 let state=null, sources=[], dragging=null, busy=false, filter="";
 let lastSig="", fails=0, timer=null;
+// Where the user just put a window, held until the machine agrees. Without
+// this a drop shows the old position for one frame and visibly snaps back.
+const optimistic=new Map();
+// Windows told to close, hidden at once rather than lingering until the
+// machine gets round to it.
+const closing=new Set();
+// A redraw between the two halves of a double click replaces the element and
+// the second click lands on nothing, so interaction briefly holds redraws off.
+let holdRenderUntil=0;
 
 const $=id=>document.getElementById(id);
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");
@@ -218,12 +231,18 @@ async function api(path,body){
 function schedule(){
   clearTimeout(timer);
   const wait = fails===0 ? 700 : Math.min(5000, 700*Math.pow(2,Math.min(fails,3)));
-  timer=setTimeout(async()=>{await poll();schedule();},wait);
+  timer=setTimeout(async()=>{
+    // Whatever happens in there, the next tick is still booked. A single
+    // exception used to end polling for the life of the page.
+    try{ await poll(); }catch(e){ console.error(e); }
+    finally{ schedule(); }
+  },wait);
 }
 
 async function poll(){
-  // Never redraw under someone's hand: a drag in progress owns the layout.
-  if(busy||dragging){return;}
+  // Never redraw under someone's hand: a drag, or the gap inside a double
+  // click, owns the layout.
+  if(busy||dragging||Date.now()<holdRenderUntil){return;}
   const s=await api("/api/state");
   if(!s)return;
   const sig=JSON.stringify(s);
@@ -273,6 +292,10 @@ function renderDesk(){
   d.style.height=Math.round(dh*scale)+"px";
   $("deskinfo").textContent=dw+" x "+dh;
 
+  const alive=new Set(st.windows.map(w=>w.id));
+  [...closing].forEach(id=>{ if(!alive.has(id)) closing.delete(id); });
+  [...optimistic.keys()].forEach(id=>{ if(!alive.has(id)) optimistic.delete(id); });
+
   d.innerHTML="";
   (st.monitors||[]).forEach(m=>{
     const e=document.createElement("div");
@@ -293,16 +316,30 @@ function renderDesk(){
   }
 
   st.windows.forEach(w=>{
+    if(closing.has(w.id))return;
+
+    // Prefer where the user put it until the machine reports the same thing,
+    // or until it has clearly not taken.
+    let g={x:w.x,y:w.y,width:w.width,height:w.height};
+    const o=optimistic.get(w.id);
+    if(o){
+      const agreed=Math.abs(w.x-o.x)<3&&Math.abs(w.y-o.y)<3&&
+                   Math.abs(w.width-o.width)<3&&Math.abs(w.height-o.height)<3;
+      if(agreed||Date.now()>o.until) optimistic.delete(w.id);
+      else g=o;
+    }
+
     const e=document.createElement("div");
     e.className="win"+(w.kind==="multiview"?" mv":"")+(w.minimized?" min":"");
-    e.style.left=Math.round((w.x-st.desktop.x)*scale)+"px";
-    e.style.top=Math.round((w.y-st.desktop.y)*scale)+"px";
-    e.style.width=Math.max(60,Math.round(w.width*scale))+"px";
-    e.style.height=Math.max(38,Math.round(w.height*scale))+"px";
+    e.style.left=Math.round((g.x-st.desktop.x)*scale)+"px";
+    e.style.top=Math.round((g.y-st.desktop.y)*scale)+"px";
+    e.style.width=Math.max(60,Math.round(g.width*scale))+"px";
+    e.style.height=Math.max(38,Math.round(g.height*scale))+"px";
     e.innerHTML=
       `<div class="cap">${esc(w.title)}${w.kind==="multiview"?
          '<span class="tag direct">multiview</span>':""}</div>
        <div class="body">${esc(w.address||(w.maximized?"maximised":""))}</div>
+       <div class="m" title="${w.minimized?"Restore":"Minimise"}">${w.minimized?"&#9633;":"&minus;"}</div>
        <div class="x" title="Close">&times;</div><div class="grip"></div>`;
     d.appendChild(e);
     wireWindow(e,w,scale);
@@ -312,15 +349,30 @@ function renderDesk(){
 function wireWindow(el,w,scale){
   el.querySelector(".x").addEventListener("click",async ev=>{
     ev.stopPropagation();
+    // Gone from the page at once. The machine catches up in its own time, and
+    // the mark is dropped when the window really has gone.
+    closing.add(w.id);
+    el.remove();
     busy=true; await api("/api/command",{kind:"close",id:w.id}); busy=false;
     lastSig=""; toast("Closed"); poll();
   });
 
-  el.addEventListener("dblclick",async()=>{
+  el.querySelector(".m").addEventListener("click",async ev=>{
+    ev.stopPropagation();
+    holdRenderUntil=Date.now()+300;
+    busy=true;
+    await api("/api/command",{kind:"state",id:w.id,
+      state:w.minimized?"restore":"minimize"});
+    busy=false; lastSig=""; holdRenderUntil=0; poll();
+  });
+
+  el.addEventListener("dblclick",async ev=>{
+    ev.preventDefault();
+    holdRenderUntil=Date.now()+400;
     busy=true;
     await api("/api/command",{kind:"state",id:w.id,
       state:w.maximized?"restore":"maximize"});
-    busy=false; lastSig=""; poll();
+    busy=false; lastSig=""; holdRenderUntil=0; poll();
   });
 
   el.addEventListener("dragover",e=>{
@@ -340,6 +392,9 @@ function wireWindow(el,w,scale){
   let mode=null,sx=0,sy=0,ox=0,oy=0,ow=0,oh=0;
   const down=(e,m)=>{
     if(e.button!==0)return;
+    // Covers the gap to a possible second click, so the element this one
+    // landed on is still there for it.
+    holdRenderUntil=Date.now()+450;
     mode=m;sx=e.clientX;sy=e.clientY;
     ox=parseFloat(el.style.left);oy=parseFloat(el.style.top);
     ow=parseFloat(el.style.width);oh=parseFloat(el.style.height);
@@ -361,16 +416,20 @@ function wireWindow(el,w,scale){
     const ny=Math.round(state.desktop.y+parseFloat(el.style.top)/scale);
     const nw=Math.round(parseFloat(el.style.width)/scale);
     const nh=Math.round(parseFloat(el.style.height)/scale);
-    // A click that moved nothing should not send anything.
+    // A click that moved nothing sends nothing, and must not poll either: a
+    // redraw here would take the element out from under a double click.
     if(Math.abs(nx-w.x)<3&&Math.abs(ny-w.y)<3&&
-       Math.abs(nw-w.width)<3&&Math.abs(nh-w.height)<3){poll();return;}
+       Math.abs(nw-w.width)<3&&Math.abs(nh-w.height)<3)return;
+
+    optimistic.set(w.id,{x:nx,y:ny,width:nw,height:nh,until:Date.now()+1500});
     busy=true;
     await api("/api/command",{kind:"move",id:w.id,x:nx,y:ny,width:nw,height:nh});
-    busy=false; lastSig=""; poll();
+    busy=false; lastSig=""; holdRenderUntil=0; poll();
   };
   el.addEventListener("mousedown",e=>{
     if(e.target.classList.contains("grip"))return;
     if(e.target.classList.contains("x"))return;
+    if(e.target.classList.contains("m"))return;
     down(e,"move");
   });
   grip.addEventListener("mousedown",e=>down(e,"size"));
