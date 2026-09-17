@@ -77,6 +77,12 @@ private:
     bool tracking_mouse_ = false;
 };
 
+// Smallest a window is allowed to become, in unscaled pixels. Enforced during
+// an interactive resize through WM_GETMINMAXINFO, which SetWindowPos does not
+// honour, so anything setting a size programmatically has to apply it too.
+constexpr int kMinWindowWidth = 360;
+constexpr int kMinWindowHeight = 240;
+
 // Applies the dark immersive title bar and rounded corners where supported.
 void apply_window_theme(HWND hwnd);
 // Windows 11 rounds window corners, which in full screen leaves the desktop

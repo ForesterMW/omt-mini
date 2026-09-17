@@ -396,8 +396,10 @@ std::string WebServer::respond(const std::string& request) {
         // Sanity, before anything is asked of a window. Geometry arrives from a
         // browser and must never be trusted to be sensible.
         if (command.kind == WebCommand::Kind::Move) {
-            command.width  = std::clamp(command.width, 160, 16384);
-            command.height = std::clamp(command.height, 120, 16384);
+            // Upper bound well below anything that would ask for a swap chain
+            // the machine cannot allocate.
+            command.width  = std::clamp(command.width, kMinWindowWidth, 8192);
+            command.height = std::clamp(command.height, kMinWindowHeight, 8192);
             command.x      = std::clamp(command.x, -32768, 32768);
             command.y      = std::clamp(command.y, -32768, 32768);
         }

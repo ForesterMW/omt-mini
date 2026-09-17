@@ -406,6 +406,9 @@ IDWriteTextFormat* text_format(Font f) {
 // ---- Surface -----------------------------------------------------------
 bool Surface::create(HWND hwnd) {
     if (!g_ready) return false;
+    // Creating, resizing and destroying a swap chain are sequences on the
+    // shared device, and another thread can be composing on it.
+    DeviceLock lock;
     hwnd_ = hwnd;
 
     RECT rc{};
@@ -458,6 +461,7 @@ bool Surface::create(HWND hwnd) {
 }
 
 void Surface::destroy() {
+    DeviceLock lock;
     if (d2d_open_ && dc_) { dc_->EndDraw(); d2d_open_ = false; }
     if (dc_) dc_->SetTarget(nullptr);
     cache_.clear();
@@ -472,6 +476,12 @@ void Surface::resize(UINT width, UINT height) {
     width  = std::max<UINT>(1, width);
     height = std::max<UINT>(1, height);
     if (width == width_ && height == height_) return;
+
+    // Held for the whole sequence. Unbinding render targets and resizing
+    // buffers while another thread is part way through a composite on the same
+    // device is a crash, and a window resized from the control panel arrives
+    // at an arbitrary moment relative to that thread.
+    DeviceLock lock;
 
     // Every reference to the old buffers must go before ResizeBuffers.
     if (dc_) dc_->SetTarget(nullptr);

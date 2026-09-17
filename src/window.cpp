@@ -325,8 +325,8 @@ LRESULT Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_GETMINMAXINFO: {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
-            mmi->ptMinTrackSize.x = MulDiv(360, dpi_, 96);
-            mmi->ptMinTrackSize.y = MulDiv(240, dpi_, 96);
+            mmi->ptMinTrackSize.x = MulDiv(kMinWindowWidth, dpi_, 96);
+            mmi->ptMinTrackSize.y = MulDiv(kMinWindowHeight, dpi_, 96);
             return 0;
         }
 

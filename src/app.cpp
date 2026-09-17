@@ -521,8 +521,12 @@ void App::apply_web_commands() {
                 WINDOWPLACEMENT placement{ sizeof(placement) };
                 GetWindowPlacement(hwnd, &placement);
                 if (placement.showCmd == SW_SHOWMAXIMIZED) ShowWindow(hwnd, SW_RESTORE);
+                // The same floor an interactive resize gets. SetWindowPos does
+                // not consult WM_GETMINMAXINFO, so without this the panel could
+                // take a window below any size the rest of the code expects.
                 SetWindowPos(hwnd, nullptr, command.x, command.y,
-                             std::max(160, command.width), std::max(120, command.height),
+                             std::max(kMinWindowWidth, command.width),
+                             std::max(kMinWindowHeight, command.height),
                              SWP_NOZORDER | SWP_NOACTIVATE);
                 break;
             }
