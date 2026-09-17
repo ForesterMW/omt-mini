@@ -794,6 +794,12 @@ void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     Settings& cfg = settings();
     float y = area.top + 4.0f;
 
+    ctx.text(ui::rect(area.left, y, 200.0f, 22.0f), L"Control panel", Font::BodyBold,
+             theme().text, Align::Left, false);
+    ctx.badge(area.left + ctx.text_width(L"Control panel", Font::BodyBold) + 10.0f,
+              y + 2.0f, 18.0f, L"BETA", theme().warn);
+    y += 26.0f;
+
     ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 40.0f),
                      L"A page for controlling this copy from a browser on another "
                      L"machine: what is open, where it is, and what it is showing.",

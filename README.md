@@ -25,7 +25,7 @@ If you know NDI Tools, you already know what this is.
 | Webcam Input | **Virtual webcam** | Appears as a camera in Teams, Zoom, OBS |
 | Access Manager | **Direct sources** | Reach a sender on another subnet, and put it on mDNS for everyone else |
 | Studio Monitor, several of them | **Multiview** | One wall, seven layouts, and it can be sent as a source of its own |
-| nothing like it | **Web control panel** | Drive the whole thing from a browser on another machine |
+| nothing like it | **Web control panel** (beta) | Drive the whole thing from a browser on another machine |
 
 All of it from one tray icon, one install, one thing to update.
 
@@ -94,10 +94,13 @@ Added sources can then be **announced on mDNS**, which makes them visible to
 vMix and everything else that browses for OMT sources, with no video passing
 through this machine.
 
-### Web control panel
+### Web control panel (beta)
 
 A page served by OMT Mini itself, for driving it from a browser on another
 machine. Off by default, turned on under **Settings > Web**.
+
+It is **beta**: the newest part of this and the one most likely to still have
+rough edges. Everything else here has been through more use.
 
 - Every open viewer and the multiview drawn **where they actually are**, to
   scale, across your real monitor layout
@@ -294,9 +297,9 @@ itself and the two OMT DLLs.
   needs a discovery server, which is the only remote enumeration libomt offers.
 - The reachability dot means a TCP connection was accepted, not that an OMT
   sender is behind it. The port walk goes further and confirms each hit.
-- **The control panel has no password.** Anyone who can reach its port can
-  move, retarget and close windows on that machine. It is off by default and
-  should only be turned on where you trust the network.
+- **The control panel is beta**, and has **no password**. Anyone who can reach
+  its port can move, retarget and close windows on that machine. It is off by
+  default and should only be turned on where you trust the network.
 - Windows only. The protocol is cross platform and so is most of the logic, but
   the interface, capture and camera layers are Win32.
 

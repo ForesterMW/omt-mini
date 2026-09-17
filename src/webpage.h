@@ -7,7 +7,7 @@ inline const char* kControlPanelHtml = R"HTMLPAGE(<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OMT Mini</title>
+<title>OMT Mini control panel (beta)</title>
 <style>
 :root{
   --bg:#14161a; --panel:#1c1f25; --panel-hi:#262a32; --panel-sel:#2e333d;
@@ -72,6 +72,8 @@ aside h2,section h2{
 .tag.local{color:var(--accent-hi);border-color:var(--accent-hi);background:#60a5fa22}
 .tag.mini{color:var(--ok);border-color:var(--ok);background:#22c55e22}
 .tag.mdns{color:var(--ok);border-color:var(--ok);background:#22c55e22}
+.tag.beta{color:var(--warn);border-color:var(--warn);background:#f59e0b22;
+  text-transform:uppercase;letter-spacing:.6px}
 .tag.off{color:var(--danger);border-color:var(--danger);background:#ef444422}
 .wrap{overflow-y:auto;padding:0 20px 24px;min-height:0}
 section{margin-top:4px}
@@ -147,6 +149,7 @@ select{
 <header>
   <div class="dot" id="live"></div>
   <h1>OMT Mini</h1>
+  <span class="tag beta">beta</span>
   <span class="host" id="host"></span>
   <div class="spacer"></div>
   <button class="ghost" id="mvopen">Open multiview</button>
