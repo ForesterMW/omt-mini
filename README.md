@@ -25,7 +25,7 @@ If you know NDI Tools, you already know what this is.
 | Webcam Input | **Virtual webcam** | Appears as a camera in Teams, Zoom, OBS |
 | Access Manager | **Direct sources** | Reach a sender on another subnet, and put it on mDNS for everyone else |
 | Studio Monitor, several of them | **Multiview** | One wall, seven layouts, and it can be sent as a source of its own |
-| nothing like it | **Web control panel** (beta) | Drive the whole thing from a browser on another machine |
+| nothing like it | **Web control panel** (beta) | Drive the whole thing from a browser, and see every OMT Mini on the network |
 
 All of it from one tray icon, one install, one thing to update.
 
@@ -121,6 +121,25 @@ connection has a deadline, so a client that stalls cannot pile up. Nothing a
 request touches belongs to the interface: the page and the state are strings
 prepared on the interface thread, and commands are queued for it to apply, so a
 browser can never reach a window directly.
+
+### Keeping a room of them up to date
+
+The control panel lists **every other OMT Mini on the network**, with the
+version each is running and which are behind, and offers to update one from
+there.
+
+Each copy already stamps its version into the sender information OMT carries,
+so the list costs nothing: no extra traffic, no protocol of its own. Where a
+copy has its control panel turned on it also says so, through a
+`<OMTMiniControl>` element in connection metadata, which is how this machine
+knows where to reach it.
+
+Updating another machine is **one deliberate press, with a confirmation naming
+the machine and both versions**, and it warns you not to do it to something on
+air. It is not a cascade: nothing here updates because a neighbour did.
+
+A machine with its control panel off **cannot be updated remotely at all**,
+which falls out of the panel being off by default and is worth keeping.
 
 ### Kept up to date
 

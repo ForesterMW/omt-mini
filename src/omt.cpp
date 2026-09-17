@@ -418,6 +418,11 @@ void Sender::set_sender_info(const char* product, const char* manufacturer, cons
     g_api.send_setsenderinformation(inst_, &info);
 }
 
+void Sender::add_connection_metadata(const std::string& xml) {
+    if (!inst_ || xml.empty()) return;
+    g_api.send_addconnectionmetadata(inst_, xml.c_str());
+}
+
 void Sender::set_redirect(const std::string& address) {
     if (!inst_) return;
     g_api.send_setredirect(inst_, address.empty() ? nullptr : address.c_str());

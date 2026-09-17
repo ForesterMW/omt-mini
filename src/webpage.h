@@ -144,6 +144,18 @@ select{
 }
 #toast.on{opacity:1}
 .hint{color:var(--dim);font-size:12px;padding:0 0 10px}
+#machines{display:flex;flex-direction:column;gap:7px}
+.mach{
+  display:flex;align-items:center;gap:11px;background:var(--panel);
+  border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px;
+}
+.mach .n{font-weight:600}
+.mach .v{color:var(--dim);font-size:12px;font-family:Consolas,monospace}
+.mach .sp{flex:1}
+.mach.behind{border-color:var(--warn)}
+button.warn{background:var(--warn);border-color:var(--warn);color:#241a02;font-weight:600}
+button.warn:hover{filter:brightness(1.1)}
+button:disabled{opacity:.45;cursor:default}
 </style>
 </head>
 <body>
@@ -176,6 +188,18 @@ select{
         window to minimise or close it.
       </div>
       <div id="desk"></div>
+    </section>
+
+    <section id="fleetsec">
+      <div class="bar">
+        <h2>OMT Mini machines</h2>
+        <span class="host" id="myver"></span>
+      </div>
+      <div class="hint">
+        Other copies found on the network. Updating one closes its viewers and
+        stops its capture and multiview output, so it asks first.
+      </div>
+      <div id="machines"></div>
     </section>
 
     <section id="mvsec">
@@ -504,6 +528,61 @@ function renderTiles(){
   }
 }
 
+function renderMachines(){
+  const box=$("machines");
+  const list=state.machines||[];
+  $("myver").textContent="this machine "+(state.version||"");
+  if(!list.length){box.innerHTML='<div class="empty">No other OMT Mini found</div>';return;}
+
+  box.innerHTML="";
+  list.forEach(m=>{
+    const behind=!m.current&&m.version;
+    const e=document.createElement("div");
+    e.className="mach"+(behind&&!m.self?" behind":"");
+    e.innerHTML=
+      `<span class="n">${esc(m.host)}</span>`+
+      (m.self?'<span class="tag local">this machine</span>':"")+
+      (behind?'<span class="tag beta">out of date</span>':"")+
+      `<span class="v">${esc(m.version||"unknown")}${m.ip?"  "+esc(m.ip):""}</span>`+
+      `<span class="sp"></span>`;
+    box.appendChild(e);
+
+    if(m.self)return;
+
+    const b=document.createElement("button");
+    if(!m.port){
+      b.textContent="No control panel";
+      b.disabled=true;
+      b.title="That copy has its control panel turned off, so it cannot be asked.";
+    }else if(!behind){
+      b.textContent="Up to date";
+      b.disabled=true;
+    }else{
+      b.textContent="Update "+m.host;
+      b.className="warn";
+      b.addEventListener("click",async()=>{
+        // Deliberate, and spelled out: this closes windows on a machine the
+        // person pressing it is probably not sitting at.
+        const sure=confirm(
+          "Update "+m.host+" now?\n\n"+
+          "It is running "+(m.version||"an unknown version")+
+          " and this machine is on "+state.version+".\n\n"+
+          "That machine will close its viewers, stop its desktop capture and "+
+          "multiview output, and restart.\n\nDo not do this if it is on air.");
+        if(!sure)return;
+        busy=true;
+        const res=await fetch("/api/fleet/update",{method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({host:m.ip||m.host,port:m.port})}).then(x=>x.json()).catch(()=>null);
+        busy=false; lastSig="";
+        toast(res&&res.message?res.message:"Could not reach that machine");
+        poll();
+      });
+    }
+    e.appendChild(b);
+  });
+}
+
 function shortName(a){
   const m=/^(.*) \((.*)\)$/.exec(a);
   return m?m[2]:a;
@@ -511,7 +590,7 @@ function shortName(a){
 
 function render(){
   $("host").textContent=state.host||"";
-  renderSources(); renderDesk(); renderTiles();
+  renderSources(); renderDesk(); renderMachines(); renderTiles();
 }
 
 $("search").addEventListener("input",e=>{filter=e.target.value.toLowerCase();renderSources();});

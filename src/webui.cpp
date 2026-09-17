@@ -93,6 +93,33 @@ std::string build_web_state() {
         }));
     }
 
+    // ---- other OMT Minis on the network ----
+    // Aggregated by host: one machine usually advertises several senders, and
+    // it is the machine that gets updated, not the sender.
+    wchar_t this_host[256] = {};
+    DWORD this_host_len = ARRAYSIZE(this_host);
+    if (!GetComputerNameW(this_host, &this_host_len)) this_host_len = 0;
+    const std::string self_host = util::narrow(std::wstring(this_host, this_host_len));
+
+    std::vector<std::string> machine_objects;
+    std::vector<std::string> seen;
+    for (const auto& source : discovery().sources()) {
+        if (!source.is_omt_mini) continue;
+        const std::string host = source.host.empty() ? source.address : source.host;
+        if (std::find(seen.begin(), seen.end(), host) != seen.end()) continue;
+        seen.push_back(host);
+
+        const bool self = util::iequals(host, self_host);
+        machine_objects.push_back(json::object({
+            json::field("host", host),
+            json::field("ip", source.ip),
+            json::field("version", source.version),
+            json::field("port", source.control_port),
+            json::field("self", self),
+            json::field("current", source.version == std::string(OMTMINI_VERSION)),
+        }));
+    }
+
     std::vector<MonitorRect> monitors;
     EnumDisplayMonitors(nullptr, nullptr, &collect_monitor,
                         reinterpret_cast<LPARAM>(&monitors));
@@ -129,6 +156,8 @@ std::string build_web_state() {
         json::field("multiview_layout", view.layout),
         json::str("multiview_tiles") + ":" + json::array(tiles),
         json::field("multiview_open", multiview_engine().active()),
+        json::field("version", OMTMINI_VERSION),
+        json::str("machines") + ":" + json::array(machine_objects),
     });
 }
 
@@ -197,6 +226,7 @@ bool WebServer::start(int port, HWND notify) {
     notify_ = notify;
     running_ = true;
     thread_ = std::thread([this] { run(); });
+    fleet_thread_ = std::thread([this] { fleet_worker(); });
     util::logf("web: listening on port %d", port);
     return true;
 }
@@ -206,6 +236,11 @@ void WebServer::stop() {
     // The loop wakes at least every hundred milliseconds and closes everything
     // itself, so there is nothing to interrupt and nothing to leak.
     if (thread_.joinable()) thread_.join();
+    if (fleet_thread_.joinable()) fleet_thread_.join();
+    {
+        std::lock_guard<std::mutex> lock(fleet_mutex_);
+        fleet_queue_.clear();
+    }
     util::logf("web: stopped");
 }
 
@@ -225,6 +260,65 @@ bool WebServer::take_commands(std::vector<WebCommand>* out) {
     out->assign(commands_.begin(), commands_.end());
     commands_.clear();
     return true;
+}
+
+// ---- talking to another machine ----------------------------------------
+void WebServer::ask_machine_to_update(const std::string& host, int port) {
+    addrinfo hints{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* resolved = nullptr;
+    if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &resolved) != 0 ||
+        !resolved) {
+        util::logf("fleet: could not resolve %s", host.c_str());
+        return;
+    }
+
+    SOCKET s = socket(resolved->ai_family, resolved->ai_socktype, resolved->ai_protocol);
+    bool ok = false;
+    if (s != INVALID_SOCKET) {
+        DWORD timeout = 4000;
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
+                   sizeof(timeout));
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout),
+                   sizeof(timeout));
+        if (connect(s, resolved->ai_addr, static_cast<int>(resolved->ai_addrlen)) == 0) {
+            const std::string body = "{}";
+            std::string req = "POST /api/update HTTP/1.1\r\n";
+            req += "Host: " + host + "\r\n";
+            req += "Content-Type: application/json\r\n";
+            req += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+            req += "Connection: close\r\n\r\n" + body;
+
+            size_t sent = 0;
+            while (sent < req.size()) {
+                const int n = send(s, req.data() + sent, static_cast<int>(req.size() - sent), 0);
+                if (n <= 0) break;
+                sent += static_cast<size_t>(n);
+            }
+            char buffer[512];
+            const int n = recv(s, buffer, sizeof(buffer) - 1, 0);
+            ok = n > 0 && std::string(buffer, static_cast<size_t>(n)).find(" 200 ") !=
+                          std::string::npos;
+        }
+        closesocket(s);
+    }
+    freeaddrinfo(resolved);
+    util::logf("fleet: asked %s:%d to update, %s", host.c_str(), port,
+               ok ? "accepted" : "no answer");
+}
+
+void WebServer::fleet_worker() {
+    while (running_) {
+        std::pair<std::string,int> job;
+        bool have = false;
+        {
+            std::lock_guard<std::mutex> lock(fleet_mutex_);
+            if (!fleet_queue_.empty()) { job = fleet_queue_.front(); fleet_queue_.pop_front(); have = true; }
+        }
+        if (!have) { Sleep(100); continue; }
+        ask_machine_to_update(job.first, job.second);
+    }
 }
 
 // ---- the loop -----------------------------------------------------------
@@ -360,6 +454,38 @@ std::string WebServer::respond(const std::string& request) {
         return http_response("200 OK", "application/json", state_json_);
     }
 
+    // Called by another OMT Mini's panel. Deliberate, and only reachable at
+    // all because this copy has its panel turned on.
+    if (path == "/api/update" && method == "POST") {
+        WebCommand command;
+        command.kind = WebCommand::Kind::UpdateNow;
+        queue(command);
+        util::logf("web: update requested by another machine");
+        return http_response("200 OK", "application/json",
+            json::object({ json::field("ok", true),
+                           json::field("message", "Update requested") }));
+    }
+
+    if (path == "/api/fleet/update" && method == "POST") {
+        const size_t header_end = request.find("\r\n\r\n");
+        const std::string body =
+            header_end == std::string::npos ? std::string() : request.substr(header_end + 4);
+        const std::string host = json::get_string(body, "host");
+        const int port = json::get_int(body, "port", 0);
+        if (host.empty() || port <= 0) {
+            return http_response("200 OK", "application/json",
+                json::object({ json::field("ok", false),
+                               json::field("message", "That machine has no control panel") }));
+        }
+        {
+            std::lock_guard<std::mutex> lock(fleet_mutex_);
+            if (fleet_queue_.size() < 16) fleet_queue_.emplace_back(host, port);
+        }
+        return http_response("200 OK", "application/json",
+            json::object({ json::field("ok", true),
+                           json::field("message", "Asked " + host + " to update") }));
+    }
+
     if (path == "/api/command" && method == "POST") {
         const size_t header_end = request.find("\r\n\r\n");
         const std::string body =
@@ -386,6 +512,7 @@ std::string WebServer::respond(const std::string& request) {
         else if (kind == "layout") command.kind = WebCommand::Kind::MultiviewLayout;
         else if (kind == "openmv") command.kind = WebCommand::Kind::OpenMultiview;
         else if (kind == "add")    command.kind = WebCommand::Kind::AddSource;
+        else if (kind == "update")  command.kind = WebCommand::Kind::UpdateNow;
 
         if (command.kind == WebCommand::Kind::None) {
             return http_response("200 OK", "application/json",

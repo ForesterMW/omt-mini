@@ -54,6 +54,10 @@ public:
     void refresh_web_snapshot();
     void apply_web_commands();
     void web_add_source(const std::string& typed);
+    // Runs a check, and if there is something newer, downloads and installs
+    // it. Reached only from a deliberate press, locally or from another
+    // machine's panel, never on a timer.
+    void request_update_now();
     HWND   message_window() const { return hwnd_; }
 
     // Start at login is stored in the per-user Run key.
@@ -89,6 +93,7 @@ private:
     std::unique_ptr<MultiviewWindow> multiview_window_;
     std::vector<std::string>        menu_sources_;
     bool                            scan_for_web_ = false;
+    bool                            update_on_request_ = false;
     mutable std::mutex              web_mutex_;
     std::vector<WebWindow>          web_snapshot_;
     bool                            update_announced_ = false;

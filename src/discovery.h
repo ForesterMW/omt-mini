@@ -32,6 +32,8 @@ struct DiscoveredSource {
     // mechanism OMT already provides for this. Empty until identified.
     std::string product;
     std::string manufacturer;
+    std::string version;        // what the sender reports about itself
+    int         control_port = 0;   // its control panel, 0 when it has none
     bool        is_omt_mini = false;
 
     // Resolved for display, so the address to reach a source by hand is

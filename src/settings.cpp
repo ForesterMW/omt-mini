@@ -257,3 +257,11 @@ void Settings::apply_to_libomt() const {
     util::logf("omt: settings applied (discovery='%s' ports=%d-%d)",
                discovery_server.c_str(), port_start, port_end);
 }
+
+std::string omtmini_control_metadata() {
+    const Settings& cfg = settings();
+    if (!cfg.web_enabled) return {};
+    // Follows the OMT metadata style: a named element with attributes.
+    return "<OMTMiniControl port=\"" + std::to_string(cfg.web_port) +
+           "\" version=\"" OMTMINI_VERSION "\" />";
+}

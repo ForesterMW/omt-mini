@@ -38,7 +38,7 @@ struct WebWindow {
 struct WebCommand {
     enum class Kind {
         None, SetSource, Move, WindowState, OpenViewer, CloseWindow,
-        MultiviewTile, MultiviewLayout, OpenMultiview, AddSource,
+        MultiviewTile, MultiviewLayout, OpenMultiview, AddSource, UpdateNow,
     };
     Kind        kind = Kind::None;
     int         id = 0;
@@ -76,7 +76,16 @@ private:
     std::string respond(const std::string& request);
     void queue(const WebCommand& command);
 
+    // Calls out to another machine's panel. One thread, a bounded queue, and
+    // joined on stop, so the event loop never blocks on a network call and
+    // nothing is left running behind it.
+    void fleet_worker();
+    void ask_machine_to_update(const std::string& host, int port);
+
     std::thread       thread_;
+    std::thread       fleet_thread_;
+    mutable std::mutex fleet_mutex_;
+    std::deque<std::pair<std::string,int>> fleet_queue_;
     std::atomic<bool> running_{false};
     uintptr_t         listener_ = ~uintptr_t(0);
     int               port_ = 0;

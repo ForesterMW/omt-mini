@@ -241,6 +241,7 @@ void DesktopCapture::run() {
         fail("omt_send_create failed"); running_ = false; CoUninitialize(); return;
     }
     sender.set_sender_info("OMT Mini Desktop Capture", "OMT Mini", OMTMINI_VERSION);
+    sender.add_connection_metadata(omtmini_control_metadata());
 
     {
         std::lock_guard<std::mutex> lock(stats_mutex_);

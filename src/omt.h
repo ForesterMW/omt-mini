@@ -175,6 +175,10 @@ public:
     // This is what OMT calls a virtual source: the sender is announced on the
     // network but carries nothing itself.
     void set_redirect(const std::string& address);
+    // Sent to every receiver the moment it connects. Used to advertise this
+    // copy's control panel, following the OMT metadata convention of a named
+    // element rather than inventing a side channel.
+    void add_connection_metadata(const std::string& xml);
     bool get_tally(int timeout_ms, OMTTally* out);
     void video_stats(OMTStatistics* out);
 

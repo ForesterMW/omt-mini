@@ -110,3 +110,8 @@ struct Settings {
 };
 
 Settings& settings();
+
+// What this copy tells other OMT Minis about itself when they connect. Empty
+// while the control panel is off, so a machine that has not opted into remote
+// control does not advertise one.
+std::string omtmini_control_metadata();

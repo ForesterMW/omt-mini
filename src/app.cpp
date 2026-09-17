@@ -344,6 +344,18 @@ HWND App::dialog_owner() const {
     return nullptr;
 }
 
+void App::request_update_now() {
+    const UpdateInfo info = updater().info();
+    if (info.state == UpdateState::ReadyToInstall) {
+        do_install_update();
+        return;
+    }
+    // The rest of the sequence is picked up as each stage reports back.
+    update_on_request_ = true;
+    util::logf("update: requested, checking");
+    updater().check(hwnd_, true);
+}
+
 void App::install_update() {
     // Called from a button, which means from inside that window's paint. Doing
     // the work here would tear the window down while its own render is still
@@ -580,6 +592,9 @@ void App::apply_web_commands() {
             case WebCommand::Kind::AddSource:
                 web_add_source(command.address);
                 break;
+            case WebCommand::Kind::UpdateNow:
+                request_update_now();
+                break;
             default:
                 break;
         }
@@ -674,6 +689,22 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             if (sources_window_) sources_window_->invalidate();
             if (settings_window_) settings_window_->invalidate();
             const UpdateInfo up = updater().info();
+
+            // Carries a requested update through its stages. Nothing here
+            // starts without request_update_now having been called first.
+            if (update_on_request_) {
+                if (up.state == UpdateState::Available) {
+                    updater().download_and_install(hwnd_);
+                } else if (up.state == UpdateState::ReadyToInstall) {
+                    update_on_request_ = false;
+                    do_install_update();
+                } else if (up.state == UpdateState::UpToDate ||
+                           up.state == UpdateState::Failed) {
+                    update_on_request_ = false;
+                    util::logf("update: requested run ended in state %d",
+                               static_cast<int>(up.state));
+                }
+            }
             // Tell the user once that something is available. Downloading and
             // installing still wait for a press.
             if (up.state == UpdateState::Available && !update_announced_) {

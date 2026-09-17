@@ -20,23 +20,57 @@ Discovery g_discovery;
 // cannot come from discovery alone. A metadata only receiver is the cheapest
 // way to ask: no video or audio is requested, so it costs the sender one short
 // connection and nothing else, and the answer is cached for good.
+// Pulls an integer attribute out of a metadata element, without a parser: the
+// elements are small, fixed and written by us.
+int metadata_attribute(const std::string& xml, const std::string& element,
+                       const std::string& attribute) {
+    const size_t at = xml.find("<" + element);
+    if (at == std::string::npos) return 0;
+    const size_t end = xml.find('>', at);
+    const std::string tag = xml.substr(at, end == std::string::npos ? std::string::npos
+                                                                    : end - at);
+    const size_t name = tag.find(attribute + "=\"");
+    if (name == std::string::npos) return 0;
+    return std::atoi(tag.c_str() + name + attribute.size() + 2);
+}
+
 bool identify_sender(const std::string& address, std::string* product,
-                     std::string* manufacturer) {
+                     std::string* manufacturer, std::string* version,
+                     int* control_port) {
     omt::Receiver receiver;
     if (!receiver.open(address, OMTFrameType_Metadata,
                        OMTPreferredVideoFormat_UYVY, OMTReceiveFlags_None))
         return false;
 
-    OMTSenderInfo info{};
-    for (int attempt = 0; attempt < 20; ++attempt) {
-        if (receiver.sender_info(&info)) {
-            if (product)      *product = info.ProductName;
-            if (manufacturer) *manufacturer = info.Manufacturer;
-            return true;
+    bool identified = false;
+    const int64_t deadline = util::now_ms() + 2000;
+    while (util::now_ms() < deadline) {
+        if (!identified) {
+            OMTSenderInfo info{};
+            if (receiver.sender_info(&info)) {
+                if (product)      *product = info.ProductName;
+                if (manufacturer) *manufacturer = info.Manufacturer;
+                if (version)      *version = info.Version;
+                identified = true;
+            }
         }
-        Sleep(100);
+
+        // Connection metadata arrives on its own; another OMT Mini uses it to
+        // say where its control panel is. Absent for anything else, and for a
+        // copy that has not turned one on.
+        if (OMTMediaFrame* frame = receiver.receive(OMTFrameType_Metadata, 100)) {
+            if (frame->Data && frame->DataLength > 1) {
+                const std::string xml(static_cast<const char*>(frame->Data));
+                const int port = metadata_attribute(xml, "OMTMiniControl", "port");
+                if (port > 0 && control_port) {
+                    *control_port = port;
+                    if (identified) return true;
+                }
+            }
+        }
+        if (identified && control_port && *control_port > 0) return true;
     }
-    return false;
+    return identified;
 }
 
 std::string this_hostname() {
@@ -182,10 +216,13 @@ void Discovery::probe_run() {
                 if (!running_) break;
                 DiscoveredSource identity;
                 identity.address = address;
-                if (identify_sender(address, &identity.product, &identity.manufacturer)) {
+                if (identify_sender(address, &identity.product, &identity.manufacturer,
+                                    &identity.version, &identity.control_port)) {
                     identity.is_omt_mini = util::iequals(identity.manufacturer, "OMT Mini");
-                    util::logf("discovery: %s identifies as '%s' by '%s'", address.c_str(),
-                               identity.product.c_str(), identity.manufacturer.c_str());
+                    util::logf("discovery: %s identifies as '%s' by '%s' %s, control port %d",
+                               address.c_str(), identity.product.c_str(),
+                               identity.manufacturer.c_str(), identity.version.c_str(),
+                               identity.control_port);
                 }
                 {
                     std::lock_guard<std::mutex> lock(identity_mutex_);
@@ -327,6 +364,8 @@ void Discovery::run() {
                     if (it != identity_.end()) {
                         entry.product      = it->second.product;
                         entry.manufacturer = it->second.manufacturer;
+                        entry.version      = it->second.version;
+                        entry.control_port = it->second.control_port;
                         entry.is_omt_mini  = it->second.is_omt_mini;
                     }
                     auto resolved = resolved_.find(entry.host);

@@ -169,6 +169,7 @@ void SourceAnnouncer::reconcile() {
         // on to the machine the source actually lives on.
         entry->sender.set_redirect(item.target);
         entry->sender.set_sender_info("OMT Mini Announcement", "OMT Mini", OMTMINI_VERSION);
+        entry->sender.add_connection_metadata(omtmini_control_metadata());
         entry->advertised = entry->sender.address();
 
         util::logf("announce: '%s' -> %s (as %s)", item.name.c_str(), item.target.c_str(),
