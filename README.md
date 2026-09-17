@@ -111,6 +111,14 @@ machine. Off by default, turned on under **Settings > Web**.
 Nothing to install at the other end and no dependencies: it is one page served
 from memory.
 
+It is built to stay out of the way. The whole server is a single non-blocking
+loop, so there are no per connection threads to leak or fail to create;
+connections, request sizes and the command queue are all capped; and every
+connection has a deadline, so a client that stalls cannot pile up. Nothing a
+request touches belongs to the interface: the page and the state are strings
+prepared on the interface thread, and commands are queued for it to apply, so a
+browser can never reach a window directly.
+
 ### Kept up to date
 
 Checks the public GitHub releases and installs the latest stable build in one

@@ -431,8 +431,14 @@ void App::refresh_web_snapshot() {
         if (describe(multiview_window_->hwnd(), info)) out.push_back(std::move(info));
     }
 
-    std::lock_guard<std::mutex> lock(web_mutex_);
-    web_snapshot_.swap(out);
+    {
+        std::lock_guard<std::mutex> lock(web_mutex_);
+        web_snapshot_.swap(out);
+    }
+
+    // The whole document is prepared here, once, however many browsers are
+    // watching. The socket loop then only ever copies a string.
+    if (web_server().running()) web_server().set_state(build_web_state());
 }
 
 void App::web_add_source(const std::string& typed) {
@@ -727,8 +733,10 @@ bool App::init(HINSTANCE instance) {
 
     const Settings& cfg = settings();
 
-    if (cfg.web_enabled && !web_server().start(cfg.web_port))
-        util::logf("web: could not start: %s", web_server().error().c_str());
+    if (cfg.web_enabled) {
+        if (web_server().start(cfg.web_port, hwnd_)) refresh_web_snapshot();
+        else util::logf("web: could not start: %s", web_server().error().c_str());
+    }
     if (cfg.capture_autostart) desktop_capture().start();
     if (cfg.webcam_autostart && !cfg.webcam_source.empty() &&
         WebcamOutput::filter_registered())

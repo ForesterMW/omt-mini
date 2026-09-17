@@ -190,26 +190,45 @@ const LAYOUTS=[
  {n:"1 + 7",c:4,r:4,h:3}];
 
 let state=null, sources=[], dragging=null, busy=false, filter="";
+let lastSig="", fails=0, timer=null;
 
 const $=id=>document.getElementById(id);
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");
   clearTimeout(e.t);e.t=setTimeout(()=>e.classList.remove("on"),2200);}
 
+// Every request is bounded. A stalled one must never wedge the page.
 async function api(path,body){
+  const ctl=new AbortController();
+  const bail=setTimeout(()=>ctl.abort(),4000);
   try{
     const r=await fetch(path,{method:body?"POST":"GET",
       headers:body?{"Content-Type":"application/json"}:{},
-      body:body?JSON.stringify(body):undefined});
+      body:body?JSON.stringify(body):undefined,signal:ctl.signal});
     if(!r.ok) throw new Error(r.status);
-    $("live").classList.add("live");
-    return await r.json();
-  }catch(e){$("live").classList.remove("live");return null;}
+    const j=await r.json();
+    fails=0; $("live").classList.add("live");
+    return j;
+  }catch(e){
+    fails++; $("live").classList.remove("live");
+    return null;
+  }finally{clearTimeout(bail);}
+}
+
+// Back off when the other end is not answering, rather than hammering it.
+function schedule(){
+  clearTimeout(timer);
+  const wait = fails===0 ? 700 : Math.min(5000, 700*Math.pow(2,Math.min(fails,3)));
+  timer=setTimeout(async()=>{await poll();schedule();},wait);
 }
 
 async function poll(){
+  // Never redraw under someone's hand: a drag in progress owns the layout.
   if(busy||dragging){return;}
   const s=await api("/api/state");
-  if(s){state=s;sources=s.sources||[];render();}
+  if(!s)return;
+  const sig=JSON.stringify(s);
+  if(sig===lastSig)return;   // unchanged, so leave the page alone entirely
+  lastSig=sig; state=s; sources=s.sources||[]; render();
 }
 
 function tagsFor(s){
@@ -294,14 +313,14 @@ function wireWindow(el,w,scale){
   el.querySelector(".x").addEventListener("click",async ev=>{
     ev.stopPropagation();
     busy=true; await api("/api/command",{kind:"close",id:w.id}); busy=false;
-    toast("Closed"); poll();
+    lastSig=""; toast("Closed"); poll();
   });
 
   el.addEventListener("dblclick",async()=>{
     busy=true;
     await api("/api/command",{kind:"state",id:w.id,
       state:w.maximized?"restore":"maximize"});
-    busy=false; poll();
+    busy=false; lastSig=""; poll();
   });
 
   el.addEventListener("dragover",e=>{
@@ -313,7 +332,7 @@ function wireWindow(el,w,scale){
     const a=dragging.address, k=w.kind; dragging=null;
     if(k==="multiview"){toast("Drop onto a multiview cell below");return;}
     busy=true; await api("/api/command",{kind:"source",id:w.id,address:a});
-    busy=false; toast("Source changed"); poll();
+    busy=false; lastSig=""; toast("Source changed"); poll();
   });
 
   // move and resize, committed on release so the window is not spammed
@@ -338,13 +357,16 @@ function wireWindow(el,w,scale){
     window.removeEventListener("mouseup",up);
     const m=mode; mode=null; dragging=null;
     if(!m)return;
+    const nx=Math.round(state.desktop.x+parseFloat(el.style.left)/scale);
+    const ny=Math.round(state.desktop.y+parseFloat(el.style.top)/scale);
+    const nw=Math.round(parseFloat(el.style.width)/scale);
+    const nh=Math.round(parseFloat(el.style.height)/scale);
+    // A click that moved nothing should not send anything.
+    if(Math.abs(nx-w.x)<3&&Math.abs(ny-w.y)<3&&
+       Math.abs(nw-w.width)<3&&Math.abs(nh-w.height)<3){poll();return;}
     busy=true;
-    await api("/api/command",{kind:"move",id:w.id,
-      x:Math.round(state.desktop.x+parseFloat(el.style.left)/scale),
-      y:Math.round(state.desktop.y+parseFloat(el.style.top)/scale),
-      width:Math.round(parseFloat(el.style.width)/scale),
-      height:Math.round(parseFloat(el.style.height)/scale)});
-    busy=false; poll();
+    await api("/api/command",{kind:"move",id:w.id,x:nx,y:ny,width:nw,height:nh});
+    busy=false; lastSig=""; poll();
   };
   el.addEventListener("mousedown",e=>{
     if(e.target.classList.contains("grip"))return;
@@ -389,12 +411,12 @@ function renderTiles(){
       if(!dragging||dragging==="geom")return;
       const addr=dragging.address;dragging=null;
       busy=true;await api("/api/command",{kind:"tile",index:i,address:addr});
-      busy=false;toast("Cell set");poll();
+      busy=false;lastSig="";toast("Cell set");poll();
     });
     const clr=e.querySelector(".clr");
     if(clr)clr.addEventListener("click",async()=>{
       busy=true;await api("/api/command",{kind:"tile",index:i,address:""});
-      busy=false;poll();
+      busy=false;lastSig="";poll();
     });
   };
   if(L.h>0){
@@ -419,17 +441,17 @@ function render(){
 $("search").addEventListener("input",e=>{filter=e.target.value.toLowerCase();renderSources();});
 $("layout").addEventListener("change",async e=>{
   busy=true;await api("/api/command",{kind:"layout",index:+e.target.value});
-  busy=false;poll();
+  busy=false;lastSig="";poll();
 });
 $("mvopen").addEventListener("click",async()=>{
   busy=true;await api("/api/command",{kind:"openmv"});busy=false;
-  toast("Multiview opened");poll();
+  lastSig="";toast("Multiview opened");poll();
 });
 $("addbtn").addEventListener("click",async()=>{
   const a=prompt("Address of the source to add.\nLeave the port off and every sender on that machine is found.");
   if(!a)return;
   busy=true;const r=await api("/api/command",{kind:"add",address:a});busy=false;
-  toast(r&&r.message?r.message:"Added");poll();
+  lastSig="";toast(r&&r.message?r.message:"Added");poll();
 });
 $("desk").addEventListener("dragover",e=>{if(dragging&&dragging!=="geom")e.preventDefault();});
 $("desk").addEventListener("drop",async e=>{
@@ -437,11 +459,11 @@ $("desk").addEventListener("drop",async e=>{
   if(!dragging||dragging==="geom")return;
   const a=dragging.address;dragging=null;
   busy=true;await api("/api/command",{kind:"open",address:a});busy=false;
-  toast("Viewer opened");poll();
+  lastSig="";toast("Viewer opened");poll();
 });
 window.addEventListener("resize",()=>{if(state)renderDesk();});
 
-poll(); setInterval(poll,1200);
+poll(); schedule();
 </script>
 </body>
 </html>

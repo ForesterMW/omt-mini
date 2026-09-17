@@ -786,7 +786,6 @@ void SettingsWindow::tab_multiview(ui::Ctx& ctx, const D2D1_RECT_F& area) {
 // ---- Control panel -----------------------------------------------------
 void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     Settings& cfg = settings();
-    const bool live = web_server().running();
     float y = area.top + 4.0f;
 
     ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 40.0f),
@@ -799,7 +798,9 @@ void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
                      L"Serve the control panel")) {
         dirty_ = true;
         if (cfg.web_enabled) {
-            if (!web_server().start(cfg.web_port))
+            if (web_server().start(cfg.web_port, App::instance().message_window()))
+                App::instance().refresh_web_snapshot();
+            else
                 status_message_ = util::widen(web_server().error());
         } else {
             web_server().stop();
@@ -822,10 +823,12 @@ void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         cfg.save();
         if (cfg.web_enabled) {
             web_server().stop();
-            if (!web_server().start(cfg.web_port))
-                status_message_ = util::widen(web_server().error());
-            else
+            if (web_server().start(cfg.web_port, App::instance().message_window())) {
+                App::instance().refresh_web_snapshot();
                 status_message_ = L"Listening on port " + web_port_text_;
+            } else {
+                status_message_ = util::widen(web_server().error());
+            }
             status_until_ms_ = util::now_ms() + 4000;
         }
         invalidate();
@@ -835,7 +838,7 @@ void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
     ctx.separator(area.left, area.right, y);
     y += 14.0f;
 
-    if (live) {
+    if (web_server().running()) {
         ctx.text(ui::rect(area.left, y, 200.0f, 20.0f), L"Open from a browser at",
                  Font::Small, theme().text_dim, Align::Left, false);
         y += 22.0f;
@@ -854,10 +857,9 @@ void SettingsWindow::tab_web(ui::Ctx& ctx, const D2D1_RECT_F& area) {
         }
         y += 44.0f;
     } else if (!web_server().error().empty()) {
-        ctx.text(ui::rect(area.left, y, area.right - area.left, 20.0f),
-                 util::widen(web_server().error()), Font::Small, theme().danger,
-                 Align::Left, false);
-        y += 30.0f;
+        ctx.text_wrapped(D2D1::RectF(area.left, y, area.right, y + 36.0f),
+                         util::widen(web_server().error()), Font::Small, theme().danger);
+        y += 40.0f;
     } else {
         ctx.text(ui::rect(area.left, y, area.right - area.left, 20.0f), L"Not running",
                  Font::Small, theme().text_dim, Align::Left, false);
