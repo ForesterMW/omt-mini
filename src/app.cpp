@@ -383,8 +383,18 @@ void App::do_install_update() {
 }
 
 // ---- control panel ------------------------------------------------------
-std::vector<WebWindow> App::web_windows() {
+std::vector<WebWindow> App::web_windows() const {
+    std::lock_guard<std::mutex> lock(web_mutex_);
+    return web_snapshot_;
+}
+
+void App::refresh_web_snapshot() {
+    // Interface thread only. This walks the live viewers, and prune_viewers
+    // destroys windows and updates the tray icon, neither of which can be done
+    // from a socket thread. Doing it there froze the application on the first
+    // poll that raced the interface.
     prune_viewers();
+
     std::vector<WebWindow> out;
 
     auto describe = [](HWND hwnd, WebWindow& info) {
@@ -392,6 +402,7 @@ std::vector<WebWindow> App::web_windows() {
         RECT rc{};
         if (!GetWindowRect(hwnd, &rc)) return false;
         WINDOWPLACEMENT placement{ sizeof(placement) };
+        placement.length = sizeof(placement);
         GetWindowPlacement(hwnd, &placement);
         info.x = rc.left;
         info.y = rc.top;
@@ -419,7 +430,9 @@ std::vector<WebWindow> App::web_windows() {
         info.title = "Multiview";
         if (describe(multiview_window_->hwnd(), info)) out.push_back(std::move(info));
     }
-    return out;
+
+    std::lock_guard<std::mutex> lock(web_mutex_);
+    web_snapshot_.swap(out);
 }
 
 void App::web_add_source(const std::string& typed) {
@@ -540,6 +553,8 @@ void App::apply_web_commands() {
                 break;
         }
     }
+
+    refresh_web_snapshot();
 }
 
 LRESULT CALLBACK App::wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -666,7 +681,8 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_TIMER:
-            prune_viewers();
+            if (web_server().running()) refresh_web_snapshot();
+            else                        prune_viewers();
             return 0;
 
         case WM_CLOSE:
@@ -705,7 +721,9 @@ bool App::init(HINSTANCE instance) {
     announcer().start();
     discovery().set_manual_sources(settings().manual_sources);
     discovery().start(hwnd_, WM_OMT_SOURCES);
-    SetTimer(hwnd_, 99, 1000, nullptr);
+    // Twice a second: the control panel wants window positions kept current,
+    // and pruning closed viewers at this rate costs nothing.
+    SetTimer(hwnd_, 99, 500, nullptr);
 
     const Settings& cfg = settings();
 

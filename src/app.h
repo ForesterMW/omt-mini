@@ -6,6 +6,7 @@
 #include "webui.h"
 
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <string>
 
@@ -45,8 +46,12 @@ public:
     size_t viewer_count() const { return viewers_.size(); }
 
     // ---- control panel ----
-    // Built on the interface thread, handed to the socket thread as a copy.
-    std::vector<WebWindow> web_windows();
+    // Safe from the socket thread: returns a copy of a snapshot that is only
+    // ever built on the interface thread. Nothing here touches a window.
+    std::vector<WebWindow> web_windows() const;
+    // Interface thread only. Walks the live windows, so it must not be called
+    // from anywhere else.
+    void refresh_web_snapshot();
     void apply_web_commands();
     void web_add_source(const std::string& typed);
     HWND   message_window() const { return hwnd_; }
@@ -82,5 +87,7 @@ private:
     std::unique_ptr<MultiviewWindow> multiview_window_;
     std::vector<std::string>        menu_sources_;
     bool                            scan_for_web_ = false;
+    mutable std::mutex              web_mutex_;
+    std::vector<WebWindow>          web_snapshot_;
     bool                            update_announced_ = false;
 };

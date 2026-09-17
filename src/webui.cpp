@@ -59,7 +59,6 @@ BOOL CALLBACK collect_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM param) {
 
 std::string build_state() {
     // ---- sources ----
-    const auto discovered = announcer().advertised_addresses();
     std::vector<std::string> source_objects;
     for (const auto& source : discovery().sources()) {
         const bool announced = source.is_manual && announcer().is_announced(source.address);
