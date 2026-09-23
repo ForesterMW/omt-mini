@@ -9,6 +9,8 @@ Viewer, multiviewer, screen capture, virtual webcam and source management, in a
 [![License](https://img.shields.io/badge/licence-MIT-informational)](LICENSE)
 ![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
 
+![OMT Mini: viewer, multiview, screen capture, virtual webcam and a web control panel for Open Media Transport](docs/social-preview.png)
+
 [Open Media Transport](https://openmediatransport.org) is the open, royalty
 free video over LAN protocol published by vMix and the OMT contributors, and an
 alternative to NDI that costs nothing to implement. OMT Mini is a complete set
@@ -122,31 +124,26 @@ request touches belongs to the interface: the page and the state are strings
 prepared on the interface thread, and commands are queued for it to apply, so a
 browser can never reach a window directly.
 
-### Keeping a room of them up to date
+### Updates
 
-The control panel lists **every other OMT Mini on the network**, with the
-version each is running and which are behind, and offers to update one from
-there.
+**This machine.** Settings > About checks the public GitHub releases and
+installs the latest stable build in one press, verified against its published
+checksum before it runs. Checking and installing are deliberately separate:
+the launch check only tells you, and nothing restarts on its own, because a
+machine that is on air should never restart itself.
 
-Each copy already stamps its version into the sender information OMT carries,
-so the list costs nothing: no extra traffic, no protocol of its own. Where a
-copy has its control panel turned on it also says so, through a
-`<OMTMiniControl>` element in connection metadata, which is how this machine
-knows where to reach it.
+**Every other machine.** The control panel lists every other OMT Mini on the
+network, the version each is running, and which are behind, and offers to
+update one from there. The list costs nothing: each copy already stamps its
+version into the sender information OMT carries. Where a copy has its control
+panel on, it says so through a `<OMTMiniControl>` element in connection
+metadata, which is how this machine knows where to reach it.
 
-Updating another machine is **one deliberate press, with a confirmation naming
-the machine and both versions**, and it warns you not to do it to something on
-air. It is not a cascade: nothing here updates because a neighbour did.
-
-A machine with its control panel off **cannot be updated remotely at all**,
-which falls out of the panel being off by default and is worth keeping.
-
-### Kept up to date
-
-Checks the public GitHub releases and installs the latest stable build in one
-press, verified against its published checksum. Checking and installing are
-deliberately separate, because a machine that is on air should never restart
-itself.
+Updating another machine is one deliberate press behind a confirmation that
+names the machine and both versions and warns you not to do it to something on
+air. It is not a cascade: nothing updates because a neighbour did. A machine
+with its control panel off cannot be updated remotely at all, which falls out
+of the panel being off by default and is worth keeping.
 
 ## Install
 
@@ -264,6 +261,9 @@ To run it, put `libomt.dll` and `libvmx.dll` next to `OMTMini.exe`.
 [libomtnet release](https://github.com/openmediatransport/libomtnet/releases),
 or take them from a release archive. They are not committed here, so this
 repository stays free of binaries you would have to take on trust.
+
+Releases here are built exactly this way, from Linux, and published with their
+checksums. The workflows in `.github/` do the same and are there for forks.
 
 Release artifacts, the portable zip and the installer, in `dist/`:
 
